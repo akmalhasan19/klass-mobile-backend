@@ -1,0 +1,32 @@
+{
+  "procedural_instruction": [
+    "follow these steps",
+    "implement this",
+    "set up",
+    "ensure teacher",
+    "ensure student",
+    "prepare the",
+    "prepare students"
+  ],
+  "conversational_filler": [
+    "here is your",
+    "i have generated",
+    "i have created",
+    "i have prepared",
+    "i've",
+    "as an ai",
+    "as a language model",
+    "as claude",
+    "as chatgpt",
+    "according to my analysis"
+  ],
+  "structural_scaffolding": [
+    "this section is designed to",
+    "this lesson aims to",
+    "this activity will",
+    "this focuses on",
+    "focus on the following",
+    "be sure to",
+    "the purpose of this"
+  ]
+}
