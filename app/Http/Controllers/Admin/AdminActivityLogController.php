@@ -9,9 +9,6 @@ use Illuminate\View\View;
 
 class AdminActivityLogController extends Controller
 {
-    /**
-     * Tampilkan daftar activity log.
-     */
     public function index(Request $request): View
     {
         $action = $request->query('action');
