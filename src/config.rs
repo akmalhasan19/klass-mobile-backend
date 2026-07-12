@@ -21,8 +21,9 @@ pub struct AppConfig {
     pub media_gen_url: String,
     pub media_gen_hmac_secret: String,
 
-    pub gemini_api_key: String,
-    pub openai_api_key: String,
+    pub openrouter_api_key: String,
+    pub openrouter_model: String,
+    pub openrouter_base_url: String,
 
     pub hmac_secret: String,
     pub hmac_max_age_seconds: u64,
@@ -50,6 +51,8 @@ impl AppConfig {
             .set_default("log_format", "json")?
             .set_default("sanctum_hash_algo", "sha256")?
             .set_default("cors_allowed_origins", "")?
+            .set_default("openrouter_model", "deepseek/deepseek-v4-flash")?
+            .set_default("openrouter_base_url", "https://openrouter.ai/api/v1")?
             .build()?;
 
         let cfg: Self = config.try_deserialize()?;

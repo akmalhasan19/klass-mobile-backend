@@ -6,15 +6,15 @@ Dokumen ini dipakai untuk phase 12.3 agar verifikasi smoke dan end-to-end media 
 
 1. Backend Laravel, queue worker, llm-adapter-service, dan Python media generator service sudah aktif.
 2. Environment media generation sudah terisi, termasuk `MEDIA_GENERATION_LLM_ADAPTER_BASE_URL`, `MEDIA_GENERATION_LLM_ADAPTER_SHARED_SECRET`, `MEDIA_GENERATION_PYTHON_BASE_URL`, dan shared secret Python renderer.
-3. Adapter sudah terhubung ke Postgres eksternal dan provider Gemini aktif pada route interpretation dan delivery bila ingin memverifikasi path Gemini end-to-end.
+3. Adapter sudah terhubung ke Postgres eksternal dan provider OpenRouter aktif pada route interpretation dan delivery bila ingin memverifikasi path OpenRouter end-to-end.
 4. Teacher account sudah tersedia.
 
 ## Smoke Checks Service Boundary
 
 1. Jalankan `php artisan media-generation:smoke-llm-adapter` dari folder `backend/`.
    Expected: command lolos dengan output `LLM adapter service is reachable and healthy.`, memeriksa `GET /health` dan `GET /v1/health`, serta melaporkan `Postgres ready: yes`.
-2. Jika provider aktif memang harus Gemini, jalankan `php artisan media-generation:smoke-llm-adapter --exercise-routes --expect-provider=gemini`.
-   Expected: backend berhasil mengirim signed request ke `/v1/interpret` dan `/v1/respond`, output menunjukkan `Interpret smoke provider: gemini` dan `Respond smoke provider: gemini`, serta tidak ada fallback contract.
+2. Jika provider aktif memang harus OpenRouter, jalankan `php artisan media-generation:smoke-llm-adapter --exercise-routes --expect-provider=openrouter`.
+   Expected: backend berhasil mengirim signed request ke `/v1/interpret` dan `/v1/respond`, output menunjukkan `Interpret smoke provider: openrouter` dan `Respond smoke provider: openrouter`, serta tidak ada fallback contract.
 3. Jalankan `php artisan media-generation:smoke-python-service` dari folder `backend/`.
    Expected: backend dapat reach Python renderer dan health payload renderer lolos.
 4. Jalankan `php artisan test --testdox tests/Feature/MediaGenerationDeploymentReadinessTest.php tests/Feature/MediaGenerationOrchestrationServiceTest.php tests/Feature/MediaGenerationPublicationAndDeliveryTest.php tests/Feature/Phase10EndToEndVerificationTest.php`.
@@ -22,7 +22,7 @@ Dokumen ini dipakai untuk phase 12.3 agar verifikasi smoke dan end-to-end media 
 5. Opsional untuk cek payload mentah adapter dari host target, panggil langsung:
    `curl -fsS "$MEDIA_GENERATION_LLM_ADAPTER_BASE_URL/health"`
    `curl -fsS "$MEDIA_GENERATION_LLM_ADAPTER_BASE_URL/v1/health"`
-   Pastikan `dependencies.postgres.ready=true`, `dependencies.providers.interpretation.provider=gemini`, `dependencies.providers.delivery.provider=gemini`, dan `auth.ready=true`.
+   Pastikan `dependencies.postgres.ready=true`, `dependencies.providers.interpretation.provider=openrouter`, `dependencies.providers.delivery.provider=openrouter`, dan `auth.ready=true`.
 
 ## Manual End-to-End Flow
 
