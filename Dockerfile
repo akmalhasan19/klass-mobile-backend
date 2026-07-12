@@ -1,13 +1,13 @@
 # ═══════════════════════════════════════════════════════
 # Stage 1: Builder
-#   - rust:1.78 stable (plan specifies nightly for optimizations;
+#   - rust:1.97 stable (plan specifies nightly for optimizations;
 #     stable used here for production reliability — nightly
 #     can be swapped via build arg if smaller binary is needed)
 #   - Layer 1: system deps (slow-changing)
 #   - Layer 2: cargo fetch (dependency cache)
 #   - Layer 3: cargo build --release (source code)
 # ═══════════════════════════════════════════════════════
-FROM rust:1.78-slim-bookworm AS builder
+FROM rust:1.97-slim-bookworm AS builder
 
 WORKDIR /app
 

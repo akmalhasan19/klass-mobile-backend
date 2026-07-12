@@ -3,7 +3,7 @@ name = "klass-gateway"
 description = "Klass API Gateway — AI-powered educational content generation"
 version = "1.0.0"
 edition = "2021"
-rust-version = "1.78"
+rust-version = "1.97"
 authors = ["Klass Engineering"]
 license = "UNLICENSED"
 
