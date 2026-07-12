@@ -30,7 +30,6 @@ sqlx = { version = "0.8", features = [
     "uuid",
     "rust_decimal",
     "migrate",
-    "offline",
 ] }
 tonic = "0.12"
 prost = "0.13"
@@ -58,10 +57,10 @@ anyhow = "1.0"
 config = "0.14"
 aws-sdk-s3 = "1.56"
 aws-config = { version = "1.5", features = ["behavior-version-latest"] }
-uuid = { version = "1.11", features = ["v4", "serde", "sqlx"] }
+uuid = { version = "1.11", features = ["v4", "serde"] }
 garde = { version = "0.20", features = ["derive"] }
 utoipa = { version = "5.0", features = ["axum_extras", "chrono", "uuid"] }
-rust_decimal = { version = "1.36", features = ["serde", "sqlx"] }
+rust_decimal = { version = "1.36", features = ["serde"] }
 blake2 = "0.10"
 redis = { version = "0.27", features = ["tokio-comp", "streams"] }
 deadpool-redis = "0.18"
