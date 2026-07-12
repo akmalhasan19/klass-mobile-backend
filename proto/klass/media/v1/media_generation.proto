@@ -1,0 +1,206 @@
+syntax = "proto3";
+
+package klass.media.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/klass-app/gateway/proto/klass/media/v1;mediav1";
+option java_multiple_files = true;
+option java_package = "app.klass.proto.media.v1";
+
+// =============================================================================
+// MediaGenerationService — gRPC server-streaming untuk media generation flow
+//
+// Service ini menggantikan pola REST polling (Timer.periodic setiap 4 detik)
+// dengan server-streaming push event per state transition.
+//
+// Flutter flow:
+//   1. POST /v1/media-generations (REST) → dapat generation_id
+//   2. SubmitMediaGeneration(generation_id) → stream GenerationProgressEvent
+//   3. Render UI berdasarkan setiap event yang masuk
+//
+// Fallback: jika gRPC tidak tersedia, Flutter kembali ke REST GET polling.
+// =============================================================================
+
+service MediaGenerationService {
+
+  // Submit — mendaftarkan stream listener untuk generation yang sudah dibuat via REST.
+  // Server akan mengirim GenerationProgressEvent setiap kali state machine bertransisi.
+  // Stream ditutup setelah event terminal (COMPLETED, FAILED, CANCELLED).
+  rpc SubmitMediaGeneration(SubmitRequest) returns (stream GenerationProgressEvent);
+
+  // Regenerate — membuat generation baru dari parent yang sudah ada,
+  // lalu stream progress event untuk generation baru tersebut.
+  rpc Regenerate(RegenerateRequest) returns (stream GenerationProgressEvent);
+}
+
+// =============================================================================
+// Request Messages
+// =============================================================================
+
+// SubmitRequest — request untuk mulai menerima progress stream dari generation yang ada.
+message SubmitRequest {
+  // generation_id yang sudah dibuat via REST POST /v1/media-generations.
+  // Format: UUID v4 string.
+  string generation_id = 1;
+}
+
+// RegenerateRequest — request untuk membuat ulang (regenerasi) dari generation parent.
+message RegenerateRequest {
+  // ID dari generation yang ingin diregenerasi (parent).
+  // Format: UUID v4 string.
+  string parent_id = 1;
+
+  // Prompt tambahan untuk memandu regenerasi.
+  // Max: 5000 karakter.
+  string additional_prompt = 2;
+}
+
+// =============================================================================
+// Stream Event Messages
+// =============================================================================
+
+// GenerationProgressEvent — event yang dikirim via server stream setiap state transition.
+message GenerationProgressEvent {
+  // ID generation. Format: UUID v4.
+  string generation_id = 1;
+
+  // Status saat ini. Lihat GenerationStatus enum.
+  GenerationStatus status = 2;
+
+  // true jika status ini adalah terminal (COMPLETED, FAILED, CANCELLED).
+  bool is_terminal = 3;
+
+  // Timestamp event ini dibuat di server.
+  google.protobuf.Timestamp event_time = 4;
+
+  // Metadata tambahan — opsional, spesifik per status.
+  // Contoh: { "interpretation_ms": "1234", "model": "gemini-2.0-flash" }
+  map<string, string> metadata = 5;
+
+  // Delivery payload — hanya diisi ketika status == COMPLETED.
+  // Berisi hasil akhir yang siap ditampilkan ke user.
+  optional DeliveryPayload delivery_payload = 6;
+
+  // Error — hanya diisi ketika status == FAILED.
+  optional ErrorPayload error = 7;
+}
+
+// =============================================================================
+// Delivery Payload (COMPLETED)
+// =============================================================================
+
+// DeliveryPayload — payload lengkap yang dikirim ke Flutter saat generation COMPLETED.
+// Persis sama dengan struktur delivery_payload di Response Resource Laravel.
+message DeliveryPayload {
+  // Judul materi yang dihasilkan.
+  string title = 1;
+
+  // Ringkasan preview (1-2 kalimat).
+  string preview_summary = 2;
+
+  // Pesan personal dari AI untuk teacher.
+  string teacher_message = 3;
+
+  // Informasi artifact (file yang dihasilkan).
+  ArtifactInfo artifact = 4;
+
+  // Langkah selanjutnya yang direkomendasikan untuk teacher.
+  repeated string recommended_next_steps = 5;
+
+  // Teks fallback — digunakan Flutter jika render gagal.
+  optional string fallback = 6;
+
+  // ID topic, content, recommended_project hasil publikasi.
+  optional PublicationLinks publication = 7;
+}
+
+// ArtifactInfo — informasi file artifact yang sudah digenerate.
+message ArtifactInfo {
+  // Signed URL untuk download artifact.
+  string url = 1;
+
+  // Thumbnail URL (halaman pertama PDF, atau icon untuk DOCX/PPTX).
+  string thumbnail_url = 2;
+
+  // MIME type (application/pdf, application/vnd.openxmlformats-...).
+  string mime_type = 3;
+
+  // Ukuran file dalam bytes (opsional, tidak selalu tersedia).
+  optional int64 size_bytes = 4;
+
+  // Checksum SHA-256 untuk verifikasi integritas (opsional).
+  optional string checksum_sha256 = 5;
+}
+
+// PublicationLinks — referensi ke entity yang dibuat saat publikasi.
+message PublicationLinks {
+  // Topic yang dibuat (jika ada).
+  optional EntityRef topic = 1;
+
+  // Content yang dibuat (jika ada).
+  optional EntityRef content = 2;
+
+  // Recommended project (jika ada).
+  optional EntityRef recommended_project = 3;
+}
+
+// EntityRef — referensi ringan ke entity.
+message EntityRef {
+  string id = 1;
+  string title = 2;
+}
+
+// =============================================================================
+// Error Payload (FAILED)
+// =============================================================================
+
+// ErrorPayload — error yang dikirim saat generation FAILED.
+message ErrorPayload {
+  // Kode error (machine-readable).
+  // Contoh: "generation_failed", "provider_timeout", "artifact_invalid".
+  string code = 1;
+
+  // Pesan error human-readable untuk developer/debugging.
+  string message = 2;
+
+  // true jika Flutter bisa retry (misal: provider timeout).
+  // false jika fatal (misal: validation failed, prompt policy violation).
+  bool retryable = 3;
+}
+
+// =============================================================================
+// Shared Enums
+// =============================================================================
+
+// GenerationStatus — enum 9 status yang persis sama dengan MediaGenerationLifecycle di backend.
+enum GenerationStatus {
+  GENERATION_STATUS_UNSPECIFIED = 0;
+
+  // Initial state — generation dibuat tapi belum diproses.
+  GENERATION_STATUS_QUEUED = 1;
+
+  // LLM sedang menginterpretasi prompt → extraction subject, sub_subject, learning objectives.
+  GENERATION_STATUS_INTERPRETING = 2;
+
+  // Interpretasi selesai, decision dibuat → output type, blueprint.
+  GENERATION_STATUS_CLASSIFIED = 3;
+
+  // Media Generator sedang membuat file (.pdf/.docx/.pptx).
+  GENERATION_STATUS_GENERATING = 4;
+
+  // File diupload ke R2/S3.
+  GENERATION_STATUS_UPLOADING = 5;
+
+  // Entity publikasi sedang dibuat (topic, content, project).
+  GENERATION_STATUS_PUBLISHING = 6;
+
+  // Terminal — semua berhasil.
+  GENERATION_STATUS_COMPLETED = 7;
+
+  // Terminal — gagal (tidak bisa dipulihkan).
+  GENERATION_STATUS_FAILED = 8;
+
+  // Terminal — dibatalkan oleh user.
+  GENERATION_STATUS_CANCELLED = 9;
+}

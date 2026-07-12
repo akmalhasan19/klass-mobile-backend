@@ -1,0 +1,91 @@
+[package]
+name = "klass-gateway"
+description = "Klass API Gateway — AI-powered educational content generation"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.78"
+authors = ["Klass Engineering"]
+license = "UNLICENSED"
+
+[build-dependencies]
+tonic-build = "0.12"
+prost-build = "0.13"
+
+[dependencies]
+axum = { version = "0.8", features = ["macros"] }
+tokio = { version = "1.43", features = [
+    "rt-multi-thread",
+    "macros",
+    "sync",
+    "time",
+    "net",
+    "fs",
+    "signal",
+    "io-util",
+] }
+sqlx = { version = "0.8", features = [
+    "postgres",
+    "runtime-tokio-rustls",
+    "chrono",
+    "uuid",
+    "rust_decimal",
+    "migrate",
+    "offline",
+] }
+tonic = "0.12"
+prost = "0.13"
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "http2",
+    "gzip",
+    "json",
+] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+argon2 = "0.5"
+tower = "0.5"
+tower-http = { version = "0.6", features = [
+    "cors",
+    "trace",
+    "compression-gzip",
+    "timeout",
+    "request-id",
+] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+thiserror = "2.0"
+anyhow = "1.0"
+config = "0.14"
+aws-sdk-s3 = "1.56"
+aws-config = { version = "1.5", features = ["behavior-version-latest"] }
+uuid = { version = "1.11", features = ["v4", "serde", "sqlx"] }
+garde = { version = "0.20", features = ["derive"] }
+utoipa = { version = "5.0", features = ["axum_extras", "chrono", "uuid"] }
+rust_decimal = { version = "1.36", features = ["serde", "sqlx"] }
+blake2 = "0.10"
+redis = { version = "0.27", features = ["tokio-comp", "streams"] }
+deadpool-redis = "0.18"
+chrono = { version = "0.4", features = ["serde"] }
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+async-trait = "0.1"
+dotenvy = "0.15"
+
+[dev-dependencies]
+tokio-test = "0.4"
+mockito = "1.6"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.dev.package."*"]
+opt-level = 2

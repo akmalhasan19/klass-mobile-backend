@@ -1,0 +1,13 @@
+// REST route handlers
+// - Auth (register, login, logout, me, refresh, security-question, verify-reset)
+// - Topics (index, show, store, update, destroy)
+// - Contents (index, show, store, update, destroy)
+// - Marketplace Tasks (index, show, store, update, destroy)
+// - Student Progress (index, show, store, update, destroy)
+// - Media Generations (index, store, show, regenerate)
+// - Homepage (recommendations, sections)
+// - Gallery (index)
+// - User Avatar (store)
+// - Freelancer (suggest, hire)
+// - Upload (upload, destroy)
+// - Admin Debug (taxonomy)

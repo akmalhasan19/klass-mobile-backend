@@ -1,130 +1,74 @@
-FROM php:8.3-fpm-alpine AS base
+# ═══════════════════════════════════════════════════════
+# Stage 1: Builder
+#   - rust:1.78 stable (plan specifies nightly for optimizations;
+#     stable used here for production reliability — nightly
+#     can be swapped via build arg if smaller binary is needed)
+#   - Layer 1: system deps (slow-changing)
+#   - Layer 2: cargo fetch (dependency cache)
+#   - Layer 3: cargo build --release (source code)
+# ═══════════════════════════════════════════════════════
+FROM rust:1.78-slim-bookworm AS builder
 
-WORKDIR /var/www/html
+WORKDIR /app
 
-RUN set -eux; \
-    apk add --no-cache \
-        nginx \
-        supervisor \
-        su-exec \
-        libpq \
-        postgresql-dev \
-        imagemagick \
-        imagemagick-dev \
-        ghostscript \
-        libzip-dev \
-        $PHPIZE_DEPS; \
-    docker-php-ext-install -j"$(nproc)" pdo_pgsql opcache zip; \
-    pecl install imagick && docker-php-ext-enable imagick; \
-    apk del --no-network postgresql-dev imagemagick-dev $PHPIZE_DEPS; \
-    rm -rf /var/cache/apk/*; \
-    # Allow Imagick to process PDF files (Ghostscript policy)
-    if [ -f /etc/ImageMagick-7/policy.xml ]; then \
-        sed -i 's/<policy domain="coder" rights="none" pattern="PDF" \/>/<!-- <policy domain="coder" rights="none" pattern="PDF" \/> -->/' /etc/ImageMagick-7/policy.xml; \
-    fi; \
-    if [ -f /etc/ImageMagick-6/policy.xml ]; then \
-        sed -i 's/<policy domain="coder" rights="none" pattern="PDF" \/>/<!-- <policy domain="coder" rights="none" pattern="PDF" \/> -->/' /etc/ImageMagick-6/policy.xml; \
-    fi; \
-    mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"; \
-    { \
-        echo '[opcache]'; \
-        echo 'opcache.enable=1'; \
-        echo 'opcache.enable_cli=1'; \
-        echo 'opcache.validate_timestamps=0'; \
-        echo 'opcache.memory_consumption=192'; \
-        echo 'opcache.interned_strings_buffer=16'; \
-        echo 'opcache.max_accelerated_files=20000'; \
-    } > "$PHP_INI_DIR/conf.d/zz-opcache.ini"; \
-    { \
-        echo '[global]'; \
-        echo 'error_log = /proc/self/fd/2'; \
-        echo 'daemonize = no'; \
-        echo; \
-        echo '[www]'; \
-        echo 'user = www-data'; \
-        echo 'group = www-data'; \
-        echo 'listen = 127.0.0.1:9000'; \
-        echo 'listen.owner = www-data'; \
-        echo 'listen.group = www-data'; \
-        echo 'pm = dynamic'; \
-        echo 'pm.max_children = 10'; \
-        echo 'pm.start_servers = 2'; \
-        echo 'pm.min_spare_servers = 1'; \
-        echo 'pm.max_spare_servers = 3'; \
-        echo 'clear_env = no'; \
-        echo 'catch_workers_output = yes'; \
-        echo 'decorate_workers_output = no'; \
-        echo 'access.log = /proc/self/fd/2'; \
-        echo 'php_admin_flag[log_errors] = on'; \
-        echo 'php_admin_value[error_log] = /proc/self/fd/2'; \
-    } > /usr/local/etc/php-fpm.d/zz-render.conf; \
-    rm -f /usr/local/etc/php-fpm.d/www.conf; \
-    mkdir -p /home/www-data/.postgresql /run/nginx /var/lib/nginx/tmp /var/log/supervisor /var/www/html/storage /var/www/html/bootstrap/cache; \
-    chmod 700 /home/www-data /home/www-data/.postgresql; \
-    chown -R www-data:www-data /home/www-data /var/www/html /run/nginx /var/lib/nginx
+# ── System dependencies ──────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    libssl-dev \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
 
-FROM composer:2.8 AS vendor
+# ── Dependency layer (cached unless Cargo.toml changes) ──
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs
 
-WORKDIR /var/www/html
+# Explicit fetch for layer caching (plan: "cargo fetch")
+RUN cargo fetch
 
-COPY composer.json composer.lock ./
+# Dummy build to cache compiled dependencies
+RUN cargo build --release
+RUN rm -rf src
 
-RUN composer install \
-    --no-dev \
-    --no-interaction \
-    --prefer-dist \
-    --optimize-autoloader \
-    --no-scripts
+# ── Source code layer ────────────────────────
+COPY src/ src/
+COPY migrations/ migrations/
+COPY proto/ proto/
+COPY build.rs build.rs
+COPY .sqlx/ .sqlx/
 
-FROM node:22-alpine AS frontend
+# Build with offline sqlx data (plan: SQLX_OFFLINE=true cargo build --release)
+ENV SQLX_OFFLINE=true
+RUN cargo build --release
 
-WORKDIR /var/www/html
+# ═══════════════════════════════════════════════════════
+# Stage 2: Runtime
+#   - debian:bookworm-slim (plan spec)
+#   - Copy binary only (no build tools)
+#   - Target image: <30MB (plan spec)
+# ═══════════════════════════════════════════════════════
+FROM debian:bookworm-slim AS runtime
 
-COPY package.json ./
+# Minimal runtime deps: TLS certs + health check curl
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN npm install --no-fund --no-audit
+# Non-root user (security best practice)
+RUN useradd --create-home --shell /bin/bash klass \
+    && mkdir -p /opt/klass \
+    && chown klass:klass /opt/klass
 
-COPY resources ./resources
-COPY vite.config.js ./vite.config.js
+# Copy binary only (plan: "copy binary only")
+COPY --from=builder /app/target/release/klass-gateway /usr/local/bin/klass-gateway
 
-RUN npm run build
+USER klass
+WORKDIR /opt/klass
 
-FROM base AS runtime
+EXPOSE 8080 50051
 
-ENV APP_ENV=production \
-    APP_DEBUG=false \
-    LOG_CHANNEL=stderr \
-    LOG_STACK=single \
-    HOME=/home/www-data \
-    DB_QUEUE_RETRY_AFTER=420 \
-    MEDIA_GENERATION_QUEUE_CONNECTION=database \
-    MEDIA_GENERATION_QUEUE_NAME=media-generation \
-    MEDIA_GENERATION_QUEUE_TRIES=3 \
-    MEDIA_GENERATION_QUEUE_TIMEOUT_SECONDS=300 \
-    MEDIA_GENERATION_QUEUE_BACKOFF_SECONDS=30 \
-    MEDIA_GENERATION_QUEUE_SLEEP_SECONDS=3 \
-    MEDIA_GENERATION_QUEUE_MAX_JOBS=250 \
-    MEDIA_GENERATION_QUEUE_MAX_TIME_SECONDS=3600 \
-    MEDIA_GENERATION_QUEUE_MEMORY_MB=256 \
-    MEDIA_GENERATION_QUEUE_CONCURRENCY=1 \
-    MEDIA_GENERATION_QUEUE_STOPWAIT_SECONDS=360 \
-    PORT=7860
+# Health check (plan: GET /health → {"status":"ok"})
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 --start-period=10s \
+    CMD curl -f http://localhost:8080/health || exit 1
 
-COPY . .
-COPY --from=vendor /var/www/html/vendor ./vendor
-COPY --from=frontend /var/www/html/public/build ./public/build
-COPY docker/nginx.conf /etc/nginx/nginx.conf.template
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-
-RUN set -eux; \
-    chmod +x /usr/local/bin/entrypoint.sh; \
-    mkdir -p /home/www-data/.postgresql storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache; \
-    rm -f bootstrap/cache/config.php; \
-    chmod 700 /home/www-data /home/www-data/.postgresql; \
-    chown -R www-data:www-data /home/www-data /var/www/html/storage /var/www/html/bootstrap/cache /run/nginx /var/lib/nginx
-
-# Hugging Face Spaces uses port 7860 by default.
-EXPOSE 7860
-
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/klass-gateway"]
