@@ -7,6 +7,12 @@ rust-version = "1.97"
 authors = ["Klass Engineering"]
 license = "UNLICENSED"
 
+[features]
+default = ["rest"]
+rest = []
+grpc = ["tonic", "prost"]
+worker = []
+
 [build-dependencies]
 tonic-build = "0.12"
 prost-build = "0.13"
@@ -31,8 +37,8 @@ sqlx = { version = "0.8", features = [
     "rust_decimal",
     "migrate",
 ] }
-tonic = "0.12"
-prost = "0.13"
+tonic = { version = "0.12", optional = true }
+prost = { version = "0.13", optional = true }
 reqwest = { version = "0.12", default-features = false, features = [
     "rustls-tls",
     "http2",

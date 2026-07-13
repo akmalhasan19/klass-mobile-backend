@@ -1,0 +1,126 @@
+envVarGroups:
+  - name: klass-shared-secrets
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: R2_ENDPOINT
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET_NAME
+        sync: false
+      - key: R2_PUBLIC_URL
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        sync: false
+      - key: OPENROUTER_BASE_URL
+        sync: false
+      - key: HMAC_SECRET
+        sync: false
+      - key: MEDIA_GEN_URL
+        sync: false
+      - key: MEDIA_GEN_HMAC_SECRET
+        sync: false
+      - key: LLM_ADAPTER_FALLBACK_URL
+        sync: false
+
+services:
+  - type: web
+    name: klass-gateway
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    region: singapore
+    numInstances: 1
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: HOST
+        value: 0.0.0.0
+      - key: GRPC_PORT
+        value: 50051
+      - key: RUST_LOG
+        value: info
+      - key: LOG_FORMAT
+        value: json
+      - key: SQLX_OFFLINE
+        value: "true"
+      - key: DATABASE_MAX_CONNECTIONS
+        value: "5"
+      - key: CORS_ALLOWED_ORIGINS
+        value: "*"
+      - key: HMAC_MAX_AGE_SECONDS
+        value: "300"
+      - key: SANCTUM_HASH_ALGO
+        value: sha256
+      - key: MEDIA_GENERATION__INTERPRETER__TIMEOUT_SECONDS
+        value: "30"
+      - key: MEDIA_GENERATION__INTERPRETER__CONNECT_TIMEOUT_SECONDS
+        value: "10"
+      - key: MEDIA_GENERATION__INTERPRETER__RETRY_ATTEMPTS
+        value: "2"
+      - key: MEDIA_GENERATION__INTERPRETER__RETRY_SLEEP_MILLISECONDS
+        value: "250"
+      - key: MEDIA_GENERATION__DRAFTING__TIMEOUT_SECONDS
+        value: "30"
+      - key: MEDIA_GENERATION__DRAFTING__CONNECT_TIMEOUT_SECONDS
+        value: "10"
+      - key: MEDIA_GENERATION__DRAFTING__RETRY_ATTEMPTS
+        value: "2"
+      - key: MEDIA_GENERATION__DRAFTING__RETRY_SLEEP_MILLISECONDS
+        value: "250"
+      - key: MEDIA_GENERATION__DELIVERY__TIMEOUT_SECONDS
+        value: "30"
+      - key: MEDIA_GENERATION__DELIVERY__CONNECT_TIMEOUT_SECONDS
+        value: "10"
+      - key: MEDIA_GENERATION__DELIVERY__RETRY_ATTEMPTS
+        value: "2"
+      - key: MEDIA_GENERATION__DELIVERY__RETRY_SLEEP_MILLISECONDS
+        value: "250"
+      - key: MEDIA_GENERATION__PYTHON__TIMEOUT_SECONDS
+        value: "60"
+      - key: MEDIA_GENERATION__PYTHON__CONNECT_TIMEOUT_SECONDS
+        value: "10"
+      - key: MEDIA_GENERATION__PYTHON__RETRY_ATTEMPTS
+        value: "2"
+      - key: MEDIA_GENERATION__PYTHON__RETRY_SLEEP_MILLISECONDS
+        value: "500"
+      - key: MEDIA_GENERATION__QUEUE__TRIES
+        value: "3"
+      - key: MEDIA_GENERATION__QUEUE__TIMEOUT_SECONDS
+        value: "300"
+      - key: MEDIA_GENERATION__QUEUE__CONCURRENCY
+        value: "1"
+      - envGroup: klass-shared-secrets
+
+  - type: worker
+    name: klass-gateway-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    startCommand: "--worker"
+    plan: starter
+    region: singapore
+    numInstances: 1
+    envVars:
+      - key: RUST_LOG
+        value: info
+      - key: LOG_FORMAT
+        value: json
+      - key: SQLX_OFFLINE
+        value: "true"
+      - key: DATABASE_MAX_CONNECTIONS
+        value: "5"
+      - key: MEDIA_GENERATION__QUEUE__TRIES
+        value: "3"
+      - key: MEDIA_GENERATION__QUEUE__TIMEOUT_SECONDS
+        value: "300"
+      - key: MEDIA_GENERATION__QUEUE__CONCURRENCY
+        value: "1"
+      - envGroup: klass-shared-secrets

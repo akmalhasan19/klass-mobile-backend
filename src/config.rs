@@ -25,6 +25,10 @@ pub struct AppConfig {
     pub openrouter_model: String,
     pub openrouter_base_url: String,
 
+    pub llm_adapter_fallback_url: String,
+
+    pub media_generation: MediaGenerationConfig,
+
     pub hmac_secret: String,
     pub hmac_max_age_seconds: u64,
 
@@ -34,6 +38,67 @@ pub struct AppConfig {
     pub cors_allowed_origins: String,
 
     pub sanctum_hash_algo: String,
+
+    #[serde(default)]
+    pub recommendations: RecommendationsConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MediaGenerationConfig {
+    pub interpreter: ServiceTimeoutsConfig,
+    pub drafting: ServiceTimeoutsConfig,
+    pub delivery: ServiceTimeoutsConfig,
+    pub python: ServiceTimeoutsConfig,
+    pub queue: QueueConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ServiceTimeoutsConfig {
+    pub timeout_seconds: f64,
+    pub connect_timeout_seconds: f64,
+    pub retry_attempts: u32,
+    pub retry_sleep_milliseconds: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct QueueConfig {
+    pub tries: u32,
+    pub timeout_seconds: u64,
+    pub backoff_seconds: u64,
+    pub concurrency: u32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RecommendationsConfig {
+    pub homepage: HomepageConfig,
+    pub distribution_summary: DistributionSummaryConfig,
+}
+
+impl Default for RecommendationsConfig {
+    fn default() -> Self {
+        Self {
+            homepage: HomepageConfig {
+                section_key: "project_recommendations".to_string(),
+                feed_endpoint: "/api/v1/homepage-recommendations".to_string(),
+            },
+            distribution_summary: DistributionSummaryConfig {
+                minimum_distinct_user_count: 2,
+                maximum_items_per_sub_subject: 1,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct HomepageConfig {
+    pub section_key: String,
+    pub feed_endpoint: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DistributionSummaryConfig {
+    pub minimum_distinct_user_count: u32,
+    pub maximum_items_per_sub_subject: u32,
 }
 
 impl AppConfig {
@@ -53,6 +118,27 @@ impl AppConfig {
             .set_default("cors_allowed_origins", "")?
             .set_default("openrouter_model", "deepseek/deepseek-v4-flash")?
             .set_default("openrouter_base_url", "https://openrouter.ai/api/v1")?
+            .set_default("llm_adapter_fallback_url", "")?
+            .set_default("media_generation.interpreter.timeout_seconds", 30.0)?
+            .set_default("media_generation.interpreter.connect_timeout_seconds", 10.0)?
+            .set_default("media_generation.interpreter.retry_attempts", 2)?
+            .set_default("media_generation.interpreter.retry_sleep_milliseconds", 250)?
+            .set_default("media_generation.drafting.timeout_seconds", 30.0)?
+            .set_default("media_generation.drafting.connect_timeout_seconds", 10.0)?
+            .set_default("media_generation.drafting.retry_attempts", 2)?
+            .set_default("media_generation.drafting.retry_sleep_milliseconds", 250)?
+            .set_default("media_generation.delivery.timeout_seconds", 30.0)?
+            .set_default("media_generation.delivery.connect_timeout_seconds", 10.0)?
+            .set_default("media_generation.delivery.retry_attempts", 2)?
+            .set_default("media_generation.delivery.retry_sleep_milliseconds", 250)?
+            .set_default("media_generation.python.timeout_seconds", 60.0)?
+            .set_default("media_generation.python.connect_timeout_seconds", 10.0)?
+            .set_default("media_generation.python.retry_attempts", 2)?
+            .set_default("media_generation.python.retry_sleep_milliseconds", 500)?
+            .set_default("media_generation.queue.tries", 3)?
+            .set_default("media_generation.queue.timeout_seconds", 300)?
+            .set_default("media_generation.queue.backoff_seconds", 30)?
+            .set_default("media_generation.queue.concurrency", 1)?
             .build()?;
 
         let cfg: Self = config.try_deserialize()?;
