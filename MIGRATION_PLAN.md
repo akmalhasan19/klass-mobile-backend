@@ -61,9 +61,9 @@
   - [x] `default = ["rest"]`
   - [x] `grpc` (feature-gates tonic server)
   - [x] `worker` (feature-gates worker binary branch)
-- [ ] **0.9 Deploy Phase 0 to Render staging**
-  - [ ] `/health` returns 200
-  - [ ] CI Rust green on PR
+- [x] **0.9 Deploy Phase 0 to Render staging**
+  - [x] `/health` returns 200
+  - [x] CI Rust green on PR
 
 ---
 
@@ -71,51 +71,51 @@
 
 **Goal:** login/register/logout/me/refresh/avatar + security question + password reset. Protected endpoints testable.
 
-- [ ] **1.1 `src/auth/mod.rs` scaffolding**
-  - [ ] Declare submodules: `password`, `tokens`, `middleware`, `signing`
-- [ ] **1.2 `src/auth/password.rs`**
-  - [ ] `hash_password(plain) -> Result<String>` via `argon2::Argon2` default params
-  - [ ] `verify_password(plain, hash) -> bool` — handle both `argon2id` (`$argon2id$`) and bcrypt (`$2y$`/`$2b$`) prefixes for DB compatibility
-  - [ ] Unit tests: hash + verify roundtrip; bcrypt prefix detection
-- [ ] **1.3 `src/auth/tokens.rs`**
-  - [ ] `PersonalAccessToken` struct (`#[derive(FromRow)]`)
-  - [ ] `issue_token(user_id, name, abilities) -> String` returns `"{id}|{plain_random_64_hex}"`, stores `sha256(plain)` hex (64 chars)
-  - [ ] `verify_token(plain) -> Option<Token>`: split at `|`, parse `id`, hash remainder, SELECT
-  - [ ] `revoke_token(id)`, `revoke_all_for_user(user_id)`
-- [ ] **1.4 `src/db/repositories/users.rs`**
-  - [ ] `UsersRepo` trait + `PgUsersRepo { pool }` impl
-  - [ ] `find_by_email`, `find_by_id`, `insert`, `update_avatar`, `update_password`, `set_role`, `set_security_qa`
-  - [ ] `User` struct `#[derive(FromRow)]` matching `users` table
-- [ ] **1.5 `src/db/repositories/personal_access_tokens.rs`**
-  - [ ] `find_by_id`, `find_by_token_hash`, `insert`, `delete_by_id`, `update_last_used_at`
-- [ ] **1.6 `src/auth/middleware.rs`**
-  - [ ] `AuthUser` extractor — reads `Authorization: Bearer`, populates `Extension<Principal>`
-  - [ ] `require_role(role)` tower middleware / handler predicate
-  - [ ] Rate limit via Redis (throttle 3,1 register; 5,1 login)
-- [ ] **1.7 `src/auth/signing.rs`**
-  - [ ] `InterServiceRequestSigner::build(secret, generation_id, payload) -> SignedRequest`
-  - [ ] HMAC-SHA256 over `timestamp.encoded_payload`
-  - [ ] Headers: `X-Request-Id`, `X-Klass-Generation-Id`, `X-Klass-Request-Timestamp`, `X-Klass-Signature-Algorithm`, `X-Klass-Signature`
-  - [ ] Unit tests: signature determinism, header shape
-- [ ] **1.8 `src/api/rest/auth.rs` — 7 handlers**
-  - [ ] `POST /auth/register` — 201, returns `UserResource` + token
-  - [ ] `POST /auth/login` — validate via `Auth::attempt`-equivalent, log `failed_login_attempt` on fail, return token + `UserResource`
-  - [ ] `POST /auth/logout` — revoke current token
-  - [ ] `GET /auth/me` — return `UserResource` of authenticated user
-  - [ ] `POST /auth/refresh` — revoke current, issue new
-  - [ ] `POST /auth/get-security-question` — return stored `security_question` for email
-  - [ ] `POST /auth/verify-and-reset-password` — verify `security_answer` hash, update password
-- [ ] **1.9 `src/api/rest/avatar.rs`**
-  - [ ] `POST /user/avatar` — any authenticated user, upload via R2, update `users.avatar_url`
-  - [ ] Depends on Phase 0 R2 client (can stub storage until Phase 3)
-- [ ] **1.10 `UserResource` serde struct**
-  - [ ] `id, name, email, avatar_url, role, primary_subject_id` (omit `password`, `security_answer`)
-  - [ ] Response envelope `{success, message, data:{user, token?}}`
-- [ ] **1.11 Tests `tests/api_auth.rs`**
-  - [ ] register → login → me → logout → refresh end-to-end
-  - [ ] Reset password flow with security question
-  - [ ] Throttle enforcement (use Redis test instance)
-  - [ ] Wrong password logs `failed_login_attempt` activity
+- [x] **1.1 `src/auth/mod.rs` scaffolding**
+  - [x] Declare submodules: `password`, `tokens`, `middleware`, `signing`
+- [x] **1.2 `src/auth/password.rs`**
+  - [x] `hash_password(plain) -> Result<String>` via `argon2::Argon2` default params
+  - [x] `verify_password(plain, hash) -> bool` — handle both `argon2id` (`$argon2id$`) and bcrypt (`$2y$`/`$2b$`) prefixes for DB compatibility
+  - [x] Unit tests: hash + verify roundtrip; bcrypt prefix detection
+- [x] **1.3 `src/auth/tokens.rs`**
+  - [x] `PersonalAccessToken` struct (`#[derive(FromRow)]`)
+  - [x] `issue_token(user_id, name, abilities) -> String` returns `"{id}|{plain_random_64_hex}"`, stores `sha256(plain)` hex (64 chars)
+  - [x] `verify_token(plain) -> Option<Token>`: split at `|`, parse `id`, hash remainder, SELECT
+  - [x] `revoke_token(id)`, `revoke_all_for_user(user_id)`
+- [x] **1.4 `src/db/repositories/users.rs`**
+  - [x] `UsersRepo` trait + `PgUsersRepo { pool }` impl
+  - [x] `find_by_email`, `find_by_id`, `insert`, `update_avatar`, `update_password`, `set_role`, `set_security_qa`
+  - [x] `User` struct `#[derive(FromRow)]` matching `users` table
+- [x] **1.5 `src/db/repositories/personal_access_tokens.rs`**
+  - [x] `find_by_id`, `find_by_token_hash`, `insert`, `delete_by_id`, `update_last_used_at`
+- [x] **1.6 `src/auth/middleware.rs`**
+  - [x] `AuthUser` extractor — reads `Authorization: Bearer`, populates `Extension<Principal>`
+  - [x] `require_role(role)` tower middleware / handler predicate
+  - [x] Rate limit via Redis (throttle 3,1 register; 5,1 login)
+- [x] **1.7 `src/auth/signing.rs`**
+  - [x] `InterServiceRequestSigner::build(secret, generation_id, payload) -> SignedRequest`
+  - [x] HMAC-SHA256 over `timestamp.encoded_payload`
+  - [x] Headers: `X-Request-Id`, `X-Klass-Generation-Id`, `X-Klass-Request-Timestamp`, `X-Klass-Signature-Algorithm`, `X-Klass-Signature`
+  - [x] Unit tests: signature determinism, header shape
+- [x] **1.8 `src/api/rest/auth.rs` — 7 handlers**
+  - [x] `POST /auth/register` — 201, returns `UserResource` + token
+  - [x] `POST /auth/login` — validate via `Auth::attempt`-equivalent, log `failed_login_attempt` on fail, return token + `UserResource`
+  - [x] `POST /auth/logout` — revoke current token
+  - [x] `GET /auth/me` — return `UserResource` of authenticated user
+  - [x] `POST /auth/refresh` — revoke current, issue new
+  - [x] `POST /auth/get-security-question` — return stored `security_question` for email
+  - [x] `POST /auth/verify-and-reset-password` — verify `security_answer` hash, update password
+- [x] **1.9 `src/api/rest/avatar.rs`**
+  - [x] `POST /user/avatar` — any authenticated user, upload via R2, update `users.avatar_url`
+  - [x] Depends on Phase 0 R2 client (can stub storage until Phase 3)
+- [x] **1.10 `UserResource` serde struct**
+  - [x] `id, name, email, avatar_url, role, primary_subject_id` (omit `password`, `security_answer`)
+  - [x] Response envelope `{success, message, data:{user, token?}}`
+- [x] **1.11 Tests `tests/api_auth.rs`**
+  - [x] register → login → me → logout → refresh end-to-end
+  - [x] Reset password flow with security question
+  - [x] Throttle enforcement (use Redis test instance)
+  - [x] Wrong password logs `failed_login_attempt` activity
 
 ---
 

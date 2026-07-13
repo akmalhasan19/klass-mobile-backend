@@ -7,23 +7,9 @@ use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetReques
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
-mod config;
-mod error;
-mod state;
-
-mod auth;
-mod cache;
-mod db;
-mod governance;
-mod media_gen;
-mod orchestrator;
-mod providers;
-mod recommendation;
-
-mod api;
-
-use config::AppConfig;
-use state::AppState;
+use klass_gateway::api;
+use klass_gateway::config::AppConfig;
+use klass_gateway::state::AppState;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -49,6 +35,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app = Router::new()
         .route("/health", get(health_check))
+        .nest("/api/v1", api::rest::api_router())
         .with_state(state)
         .layer(
             tower::ServiceBuilder::new()
