@@ -4,3 +4,9 @@
 // - S3/R2 upload (multipart)
 // - Thumbnail generation
 // - Timeout 60s, retry 2x, backoff 500ms
+
+pub mod publication;
+pub mod python_client;
+
+pub use publication::{MediaPublicationService, PublicationError, PublishResult, SvgFallbackGenerator, ThumbnailGenerator};
+pub use python_client::PythonMediaGeneratorClient;

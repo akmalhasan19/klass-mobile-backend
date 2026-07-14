@@ -10,6 +10,7 @@ pub mod llm;
 pub mod media_gen;
 pub mod orchestrator;
 pub mod providers;
+pub mod queue;
 pub mod recommendation;
 pub mod state;
 pub mod storage;

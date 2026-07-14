@@ -537,6 +537,7 @@ pub fn exhausted_decision(route: &str, _provider: &str, _model: &str) -> Preflig
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Timelike;
 
     #[test]
     fn test_window_start_minute() {

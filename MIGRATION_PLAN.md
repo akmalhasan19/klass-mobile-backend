@@ -371,88 +371,88 @@
 
 **Goal:** Async pipeline `queued→interpreting→classified→generating→uploading→publishing→completed`.
 
-- [ ] **6.1 `src/orchestrator/lifecycle.rs`**
-  - [ ] Enum `MediaGenerationLifecycle` (9 states matching `GenerationStatus` proto)
-  - [ ] `can_transition(from, to)` matrix (EXACT from Laravel)
-  - [ ] `terminal_states()`, `STATUS_ORDER` ordering, `StatusBefore` invariant (no regression)
-- [ ] **6.2 `src/orchestrator/audit_trail.rs`** (port `MediaGenerationAuditTrailService`)
-  - [ ] `initialize(generation)` — base payload in transaction with `lockForUpdate`, idempotent
-  - [ ] `transition(generation, to_status, context, attempt, job_context)` — validate via `can_transition`, compute timing, append to `status_history` (capped 50 events), update `status`/`error_code`/`error_message`
-  - [ ] `record_attempt_failure(generation, throwable, context, attempt, job_context)` — append `attempt_failed`
-  - [ ] `mark_failed(generation, throwable, ...)` — transition to `failed` if not completed/cancelled
-  - [ ] Helpers: `lock_generation`, `base_payload`, `apply_runtime_metadata`, `apply_transition_timing`, `total_duration_ms`, `append_history`, `provider_trace`, `resolve_output_type`, `error_summary`, `safe_throwable_context`, `sanitize_message` (whitespace collapse + 240 char), `filter_context` (depth-limited scrubber)
-  - [ ] Schema version `media_generation_orchestration_audit.v1`
-- [ ] **6.3 `src/orchestrator/submission.rs`** (port `MediaGenerationSubmissionService`)
-  - [ ] `create_or_reuse(teacher_id, raw_prompt, preferred_output_type, subject_id, sub_subject_id, provider_metadata)`
-  - [ ] Compute `request_fingerprint` (sha256 over teacher/prompt/output/subject/sub_subject)
-  - [ ] Compute `active_duplicate_key` when not terminal
-  - [ ] DB transaction + `SELECT FOR UPDATE` on active duplicates
-  - [ ] Reuse if found; else insert
-  - [ ] Catch `QueryException` on unique-constraint race → retry lookup
-  - [ ] `create_regeneration(parent, additional_prompt)` — combine prompts, `is_regeneration=true`, `generated_from_id`, `status=queued`
-- [ ] **6.4 `src/orchestrator/decision.rs`** (port `MediaGenerationDecisionService`)
-  - [ ] `resolve(generation)` — ensure interpretation exists, call `decide()`, call `draft()`, build `MediaGenerationSpecContract`, persist `resolved_output_type`, `decision_payload`, `generation_spec_payload`
-  - [ ] `decide(interpretation, preferred_output_type)` — rank candidates, apply teacher override, interpretation constraints, keyword signals, tie-breaker `pdf→docx→pptx`
-  - [ ] Returns: `schema_version=media_output_decision.v1`, `preferred_output_type`, `constraint_preferred_output_type`, `resolved_output_type`, `decision_source` (teacher_override|interpretation_constraint|candidate_ranking), `reason_code`, `reasoning`, `ranked_candidates`, `tie_breaker_applied`, `resolved_at`
-- [ ] **6.5 `src/orchestrator/workflow.rs`** (port `MediaGenerationWorkflowService`)
-  - [ ] `WorkflowService::process(generation_id, attempt, job_context)`
-  - [ ] Sequential checkpointed steps wrapped by `timedStep` (via `tracing::span!`)
-  - [ ] `ensureClassified`: `tokio::join!(interpret, draft)` parallel LLM calls
-  - [ ] `ensureGenerated`: call Python renderer + transition to `uploading`
-  - [ ] `ensurePublished`: publish entities
-  - [ ] `ensureCompleted`: compose delivery payload + transition to `completed`
-  - [ ] Status transitions via audit-trail service `transition` (validates lifecycle matrix)
-- [ ] **6.6 `src/media_gen/python_client.rs`** (port `PythonMediaGeneratorClient`)
-  - [ ] `PythonMediaGeneratorClient::generate(generation)`
-  - [ ] Validate `MediaGenerationSpecContract` payload
-  - [ ] Build request: `{generation_id, generation_spec, contracts:{generation_spec, artifact_metadata}}`
-  - [ ] HMAC-sign via `InterServiceRequestSigner` (Phase 1.7)
-  - [ ] Headers: `X-Klass-Generation-Id`, `X-Klass-Request-Timestamp`, `X-Klass-Signature-Algorithm: hmac-sha256`, `X-Klass-Signature`
-  - [ ] POST `{media_gen_url}/v1/generate`
-  - [ ] Decode artifact metadata via `MediaArtifactMetadataContract::validate`
-  - [ ] Persist `resolved_output_type`, `generator_provider`, `generator_model`, `generator_service_response`, `mime_type`
-  - [ ] Error code map: `error.laravel_error_code_hint` if present; 5xx/429 → `PYTHON_SERVICE_UNAVAILABLE`; else → `ARTIFACT_INVALID`
-  - [ ] Timeout 60s, retry 2× backoff 500 ms
-- [ ] **6.7 `src/media_gen/publication.rs`** (port `MediaPublicationService`)
-  - [ ] `MediaPublicationService::publish(generation)`
-  - [ ] DB transaction + lock generation
-  - [ ] `prepareArtifactForPublication`: upload artifact to R2 (`storage_path`)
-  - [ ] Validate artifact integrity: PDF header `%PDF`+EOF, OOXML zip entries, MIME type, size, SHA256 checksum
-  - [ ] Thumbnail strategy: request `thumbnail_url` from Python renderer first; if absent, minimal Rust impl:
-    - [ ] PDF → `pdfium-render` crate (render page 0 to 800×600 PNG)
-    - [ ] PPTX/DOCX → `zip` crate extract `docProps/thumbnail.jpeg|png` or first `ppt/media/image*` / `word/media/image*`
-    - [ ] Fallback SVG visual (1280×720, palette per format: PDF red, PPTX orange, default blue)
-  - [ ] Resolve or create `Topic` (from interpretation taxonomy)
-  - [ ] Resolve or create `Content` (type from `resolved_output_type`)
-  - [ ] Resolve or create `RecommendedProject` (`source_type=ai_generated`)
-  - [ ] Persist `delivery_payload` on generation
-  - [ ] Compensation: `compensate_uploaded_files` (delete R2 uploads) on failure in catch/finally
-  - [ ] Cleanup temp files in finally
-- [ ] **6.8 `src/queue/mod.rs`**
-  - [ ] Declare `redis_streams`, `worker`, `dead_letter`
-- [ ] **6.9 `src/queue/redis_streams.rs`**
-  - [ ] `enqueue(generation_id, attempt)` XADD `stream=klass:media-gen` with `{generation_id, attempt}`
-  - [ ] Idempotent `XGROUP CREATE` on boot (`consumer_group=klass-workers`)
-  - [ ] Honor `MEDIA_GENERATION_QUEUE_CONCURRENCY` env (default 1)
-- [ ] **6.10 `src/queue/worker.rs`**
-  - [ ] `Worker::run()` loop `XREADGROUP >` `count=10 block=5s`
-  - [ ] Dispatch to `WorkflowService::process`
-  - [ ] `XACK` on success
-  - [ ] `XCLAIM` after idle-timeout 300s for recovery
-  - [ ] Honor max tries 3 → else move to DLQ
-- [ ] **6.11 `src/queue/dead_letter.rs`**
-  - [ ] After N attempts → `XADD klass:media-gen-dlq` + `mark_failed`
-  - [ ] Admin manual retry endpoint helper (used in Phase 7)
-- [ ] **6.12 Worker entrypoint**
-  - [ ] `src/main.rs` parses `--worker` arg
-  - [ ] With `--worker`: run `Worker::run()` (no HTTP server)
-  - [ ] Render service `klass-gateway-worker` uses same image, startCommand `-worker`
-- [ ] **6.13 Tests**
-  - [ ] `tests/orchestrator_lifecycle.rs` — transition matrix valid/invalid, StatusBefore invariant
-  - [ ] `tests/workflow.rs` — end-to-end with mockito Python renderer + OpenRouter + R2 mock
-  - [ ] Verify all state transitions + `orchestration_audit_payload` shape
-  - [ ] `tests/queue.rs` — Redis test instance (testcontainers-rs or in-memory trait), enqueue→consume→ack
-  - [ ] `tests/publication.rs` — artifact integrity validation (PDF/OOXML), compensation on failure
+- [x] **6.1 `src/orchestrator/lifecycle.rs`**
+  - [x] Enum `MediaGenerationLifecycle` (9 states matching `GenerationStatus` proto)
+  - [x] `can_transition(from, to)` matrix (EXACT from Laravel)
+  - [x] `terminal_states()`, `STATUS_ORDER` ordering, `StatusBefore` invariant (no regression)
+- [x] **6.2 `src/orchestrator/audit_trail.rs`** (port `MediaGenerationAuditTrailService`)
+  - [x] `initialize(generation)` — base payload in transaction with `lockForUpdate`, idempotent
+  - [x] `transition(generation, to_status, context, attempt, job_context)` — validate via `can_transition`, compute timing, append to `status_history` (capped 50 events), update `status`/`error_code`/`error_message`
+  - [x] `record_attempt_failure(generation, throwable, context, attempt, job_context)` — append `attempt_failed`
+  - [x] `mark_failed(generation, throwable, ...)` — transition to `failed` if not completed/cancelled
+  - [x] Helpers: `lock_generation`, `base_payload`, `apply_runtime_metadata`, `apply_transition_timing`, `total_duration_ms`, `append_history`, `provider_trace`, `resolve_output_type`, `error_summary`, `safe_throwable_context`, `sanitize_message` (whitespace collapse + 240 char), `filter_context` (depth-limited scrubber)
+  - [x] Schema version `media_generation_orchestration_audit.v1`
+- [x] **6.3 `src/orchestrator/submission.rs`** (port `MediaGenerationSubmissionService`)
+  - [x] `create_or_reuse(teacher_id, raw_prompt, preferred_output_type, subject_id, sub_subject_id, provider_metadata)`
+  - [x] Compute `request_fingerprint` (sha256 over teacher/prompt/output/subject/sub_subject)
+  - [x] Compute `active_duplicate_key` when not terminal
+  - [x] DB transaction + `SELECT FOR UPDATE` on active duplicates
+  - [x] Reuse if found; else insert
+  - [x] Catch `QueryException` on unique-constraint race → retry lookup
+  - [x] `create_regeneration(parent, additional_prompt)` — combine prompts, `is_regeneration=true`, `generated_from_id`, `status=queued`
+- [x] **6.4 `src/orchestrator/decision.rs`** (port `MediaGenerationDecisionService`)
+  - [x] `resolve(generation)` — ensure interpretation exists, call `decide()`, call `draft()`, build `MediaGenerationSpecContract`, persist `resolved_output_type`, `decision_payload`, `generation_spec_payload`
+  - [x] `decide(interpretation, preferred_output_type)` — rank candidates, apply teacher override, interpretation constraints, keyword signals, tie-breaker `pdf→docx→pptx`
+  - [x] Returns: `schema_version=media_output_decision.v1`, `preferred_output_type`, `constraint_preferred_output_type`, `resolved_output_type`, `decision_source` (teacher_override|interpretation_constraint|candidate_ranking), `reason_code`, `reasoning`, `ranked_candidates`, `tie_breaker_applied`, `resolved_at`
+- [x] **6.5 `src/orchestrator/workflow.rs`** (port `MediaGenerationWorkflowService`)
+  - [x] `WorkflowService::process(generation_id, attempt, job_context)`
+  - [x] Sequential checkpointed steps wrapped by `timedStep` (via `tracing::span!`)
+  - [x] `ensureClassified`: `tokio::join!(interpret, draft)` parallel LLM calls
+  - [x] `ensureGenerated`: call Python renderer + transition to `uploading`
+  - [x] `ensurePublished`: publish entities
+  - [x] `ensureCompleted`: compose delivery payload + transition to `completed`
+  - [x] Status transitions via audit-trail service `transition` (validates lifecycle matrix)
+- [x] **6.6 `src/media_gen/python_client.rs`** (port `PythonMediaGeneratorClient`)
+  - [x] `PythonMediaGeneratorClient::generate(generation)`
+  - [x] Validate `MediaGenerationSpecContract` payload
+  - [x] Build request: `{generation_id, generation_spec, contracts:{generation_spec, artifact_metadata}}`
+  - [x] HMAC-sign via `InterServiceRequestSigner` (Phase 1.7)
+  - [x] Headers: `X-Klass-Generation-Id`, `X-Klass-Request-Timestamp`, `X-Klass-Signature-Algorithm: hmac-sha256`, `X-Klass-Signature`
+  - [x] POST `{media_gen_url}/v1/generate`
+  - [x] Decode artifact metadata via `MediaArtifactMetadataContract::validate`
+  - [x] Persist `resolved_output_type`, `generator_provider`, `generator_model`, `generator_service_response`, `mime_type`
+  - [x] Error code map: `error.laravel_error_code_hint` if present; 5xx/429 → `PYTHON_SERVICE_UNAVAILABLE`; else → `ARTIFACT_INVALID`
+  - [x] Timeout 60s, retry 2× backoff 500 ms
+- [x] **6.7 `src/media_gen/publication.rs`** (port `MediaPublicationService`)
+  - [x] `MediaPublicationService::publish(generation)`
+  - [x] DB transaction + lock generation
+  - [x] `prepareArtifactForPublication`: upload artifact to R2 (`storage_path`)
+  - [x] Validate artifact integrity: PDF header `%PDF`+EOF, OOXML zip entries, MIME type, size, SHA256 checksum
+  - [x] Thumbnail strategy: request `thumbnail_url` from Python renderer first; if absent, minimal Rust impl:
+    - [x] PDF → `pdfium-render` crate (render page 0 to 800×600 PNG)
+    - [x] PPTX/DOCX → `zip` crate extract `docProps/thumbnail.jpeg|png` or first `ppt/media/image*` / `word/media/image*`
+    - [x] Fallback SVG visual (1280×720, palette per format: PDF red, PPTX orange, default blue)
+  - [x] Resolve or create `Topic` (from interpretation taxonomy)
+  - [x] Resolve or create `Content` (type from `resolved_output_type`)
+  - [x] Resolve or create `RecommendedProject` (`source_type=ai_generated`)
+  - [x] Persist `delivery_payload` on generation
+  - [x] Compensation: `compensate_uploaded_files` (delete R2 uploads) on failure in catch/finally
+  - [x] Cleanup temp files in finally
+- [x] **6.8 `src/queue/mod.rs`**
+  - [x] Declare `redis_streams`, `worker`, `dead_letter`
+- [x] **6.9 `src/queue/redis_streams.rs`**
+  - [x] `enqueue(generation_id, attempt)` XADD `stream=klass:media-gen` with `{generation_id, attempt}`
+  - [x] Idempotent `XGROUP CREATE` on boot (`consumer_group=klass-workers`)
+  - [x] Honor `MEDIA_GENERATION_QUEUE_CONCURRENCY` env (default 1)
+- [x] **6.10 `src/queue/worker.rs`**
+  - [x] `Worker::run()` loop `XREADGROUP >` `count=10 block=5s`
+  - [x] Dispatch to `WorkflowService::process`
+  - [x] `XACK` on success
+  - [x] `XCLAIM` after idle-timeout 300s for recovery
+  - [x] Honor max tries 3 → else move to DLQ
+- [x] **6.11 `src/queue/dead_letter.rs`**
+  - [x] After N attempts → `XADD klass:media-gen-dlq` + `mark_failed`
+  - [x] Admin manual retry endpoint helper (used in Phase 7)
+- [x] **6.12 Worker entrypoint**
+  - [x] `src/main.rs` parses `--worker` arg
+  - [x] With `--worker`: run `Worker::run()` (no HTTP server)
+  - [x] Render service `klass-gateway-worker` uses same image, startCommand `-worker`
+- [x] **6.13 Tests**
+  - [x] `tests/orchestrator_lifecycle.rs` — transition matrix valid/invalid, StatusBefore invariant
+  - [x] `tests/workflow.rs` — end-to-end with mockito Python renderer + OpenRouter + R2 mock
+  - [x] Verify all state transitions + `orchestration_audit_payload` shape
+  - [x] `tests/queue.rs` — Redis test instance (testcontainers-rs or in-memory trait), enqueue→consume→ack
+  - [x] `tests/publication.rs` — artifact integrity validation (PDF/OOXML), compensation on failure
 
 ---
 

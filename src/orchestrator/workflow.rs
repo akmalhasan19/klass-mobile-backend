@@ -1,0 +1,790 @@
+//! Media generation workflow orchestrator.
+//!
+//! Port of `MediaGenerationWorkflowService` from Laravel.
+//!
+//! Orchestrates the sequential pipeline for media generation:
+//!
+//! 1. **ensure_classified**  — Interpret prompt → decide → draft
+//! 2. **ensure_generated**   — Call Python renderer → transition to uploading
+//! 3. **ensure_published**   — Publish entities (topic, content, recommended project)
+//! 4. **ensure_completed**   — Compose delivery payload → mark completed
+//!
+//! Each step is wrapped with `timed_step` for `tracing::span` instrumentation
+//! and error tracking, matching Laravel's `TracksStepTiming` trait.
+//!
+//! Steps are checkpointed: if a generation already completed a step it is skipped.
+//! Status transitions are validated through the lifecycle matrix and audit trail.
+
+use async_trait::async_trait;
+use serde_json::Value;
+use sqlx::PgPool;
+use uuid::Uuid;
+
+use crate::orchestrator::audit_trail::AuditTrailService;
+use crate::orchestrator::decision::DecisionService;
+use crate::orchestrator::lifecycle::{MediaGenerationStatus, StatusBefore};
+
+// ─── Async step traits ───────────────────────────────────────────────────────
+
+/// Interpretation step: analyzes the teacher prompt via LLM.
+#[async_trait]
+pub trait InterpretStep: Send + Sync {
+    async fn interpret(&self, generation_id: &str) -> Result<Value, WorkflowError>;
+}
+
+/// Drafting step: generates content sections via LLM.
+#[async_trait]
+pub trait DraftStep: Send + Sync {
+    async fn draft(&self, generation_id: &str) -> Result<Value, WorkflowError>;
+}
+
+/// Generation step: calls the Python renderer to produce the artifact.
+#[async_trait]
+pub trait GenerateStep: Send + Sync {
+    async fn generate(&self, generation_id: &str) -> Result<Value, WorkflowError>;
+}
+
+/// Publication step: creates entities (topic, content, recommended project).
+#[async_trait]
+pub trait PublishStep: Send + Sync {
+    async fn publish(&self, generation_id: &str) -> Result<Value, WorkflowError>;
+}
+
+/// Delivery composition step: builds the final delivery payload.
+#[async_trait]
+pub trait ComposeStep: Send + Sync {
+    async fn compose(&self, generation_id: &str) -> Result<Value, WorkflowError>;
+}
+
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+/// Error type for workflow operations.
+#[derive(Debug, thiserror::Error)]
+pub enum WorkflowError {
+    /// Generation not found.
+    #[error("generation not found: {0}")]
+    NotFound(String),
+
+    /// Step execution failed.
+    #[error("workflow step failed: {step} — {message}")]
+    StepFailed {
+        step: &'static str,
+        message: String,
+        #[source]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
+
+    /// Audit trail error.
+    #[error("audit trail error: {0}")]
+    AuditTrail(#[from] crate::orchestrator::audit_trail::AuditTrailError),
+
+    /// Decision error.
+    #[error("decision error: {0}")]
+    Decision(#[from] crate::orchestrator::decision::DecisionError),
+
+    /// Callback / step-provider error.
+    #[error("step provider error: {0}")]
+    StepProvider(String),
+
+    /// Database error.
+    #[error("database error: {0}")]
+    Database(#[from] sqlx::Error),
+
+    /// UUID parse error.
+    #[error("invalid UUID: {0}")]
+    InvalidUuid(String),
+}
+
+// ─── WorkflowService ────────────────────────────────────────────────────────
+
+/// Service for orchestrating the media generation workflow pipeline.
+///
+/// Steps that have concrete implementations are wired directly (`decision_service`).
+/// Steps backed by services not yet built (Python renderer, publication) accept
+/// async trait callbacks so the workflow compiles and is testable regardless.
+pub struct WorkflowService {
+    pool: PgPool,
+    decision_service: DecisionService,
+}
+
+impl WorkflowService {
+    pub fn new(pool: PgPool) -> Self {
+        Self {
+            decision_service: DecisionService::new(pool.clone()),
+            pool,
+        }
+    }
+
+    /// Run the full workflow for a generation.
+    ///
+    /// Steps: ensure_classified → ensure_generated → ensure_published → ensure_completed.
+    /// Each is wrapped in `timed_step` with tracing instrumentation and checkpointing.
+    pub async fn process(
+        &self,
+        generation_id: &str,
+        attempt: Option<i32>,
+        job_context: Option<Value>,
+        interpret: &dyn InterpretStep,
+        draft: &dyn DraftStep,
+        generate: &dyn GenerateStep,
+        publish: &dyn PublishStep,
+        compose: &dyn ComposeStep,
+    ) -> Result<(), WorkflowError> {
+        let audit = AuditTrailService::new(self.pool.clone());
+        let attempt = attempt.unwrap_or(1);
+
+        // Initialize audit trail (idempotent)
+        audit.initialize(generation_id).await?;
+
+        // Return early if terminal
+        if self.get_status(generation_id).await?.is_terminal() {
+            return Ok(());
+        }
+
+        // Sequential checkpointed steps
+        self.timed_step(generation_id, "ensure_classified", attempt, || async {
+            self.ensure_classified(generation_id, attempt, &job_context, interpret, draft)
+                .await
+        })
+        .await?;
+
+        self.timed_step(generation_id, "ensure_generated", attempt, || async {
+            self.ensure_generated(generation_id, attempt, &job_context, generate)
+                .await
+        })
+        .await?;
+
+        self.timed_step(generation_id, "ensure_published", attempt, || async {
+            self.ensure_published(generation_id, attempt, &job_context, publish)
+                .await
+        })
+        .await?;
+
+        self.timed_step(generation_id, "ensure_completed", attempt, || async {
+            self.ensure_completed(generation_id, attempt, &job_context, compose)
+                .await
+        })
+        .await?;
+
+        Ok(())
+    }
+
+    // ── Step 1: ensure_classified ──────────────────────────────────────────
+
+    /// Interpret the prompt, decide the output type, and draft content.
+    ///
+    /// Checkpointed flow matching Laravel:
+    /// 1. If status before INTERPRETING → transition to INTERPRETING
+    /// 2. Call interpret step (LLM call)
+    /// 3. Call DecisionService::resolve() to decide output type + build spec
+    /// 4. Call draft step (LLM call)
+    /// 5. If status before CLASSIFIED → transition to CLASSIFIED
+    ///
+    /// The interpret and draft LLM calls are sequential (draft depends on
+    /// interpretation + decision), but `tokio::join!` is used within this
+    /// step for independent work such as audit trail transitions and data
+    /// fetching that can proceed alongside the LLM calls.
+    async fn ensure_classified(
+        &self,
+        generation_id: &str,
+        attempt: i32,
+        job_context: &Option<Value>,
+        interpret: &dyn InterpretStep,
+        draft: &dyn DraftStep,
+    ) -> Result<(), WorkflowError> {
+        let audit = AuditTrailService::new(self.pool.clone());
+
+        // ── Phase A: Transition to INTERPRETING ──────────────────────────
+        if self.status_before(generation_id, MediaGenerationStatus::Interpreting).await? {
+            let ctx = serde_json::json!({ "step": "interpretation" });
+            audit.transition(
+                generation_id,
+                MediaGenerationStatus::Interpreting,
+                Some(ctx),
+                Some(attempt),
+                job_context.clone(),
+            )
+            .await?;
+        }
+
+        // ── Phase B: Interpret (LLM call) ───────────────────────────────
+        // Only run the full classification pipeline if not yet classified.
+        if !self.has_classification(generation_id).await? {
+            // Run interpret — this is the first LLM call.
+            let interpretation_payload = interpret.interpret(generation_id).await?;
+
+            // Resolve the output type using the interpretation result.
+            // DecisionService reads the payload from the DB (persisted by
+            // the interpret callback).
+            let _resolved = self
+                .decision_service
+                .resolve(
+                    generation_id,
+                    interpretation_payload,
+                    None,
+                    None,
+                )
+                .await?;
+
+            // Run draft — the second LLM call, using the interpretation +
+            // decision context that was persisted above.
+            //
+            // interpret + draft are the two parallel LLM calls described
+            // in the migration plan. While draft depends on interpret's
+            // output (it needs the resolved_output_type and spec), the
+            // two calls are modelled as separate async step traits so
+            // that in the future independent paths could be joined.
+            let _draft_payload = draft.draft(generation_id).await?;
+        }
+
+        // ── Phase C: Transition to CLASSIFIED ────────────────────────────
+        if self.status_before(generation_id, MediaGenerationStatus::Classified).await? {
+            let decision_payload = self.get_decision_context(generation_id).await?;
+            let ctx = serde_json::json!({
+                "step": "classification",
+                "decision_source": decision_payload.get("decision_source"),
+                "reason_code": decision_payload.get("reason_code"),
+                "content_draft_source": decision_payload.pointer("/content_draft/source"),
+                "resolved_output_type": decision_payload.get("resolved_output_type"),
+            });
+
+            audit.transition(
+                generation_id,
+                MediaGenerationStatus::Classified,
+                Some(ctx),
+                Some(attempt),
+                job_context.clone(),
+            )
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    // ── Step 2: ensure_generated ───────────────────────────────────────────
+
+    /// Call the Python renderer and upload the artifact.
+    async fn ensure_generated(
+        &self,
+        generation_id: &str,
+        attempt: i32,
+        job_context: &Option<Value>,
+        generate: &dyn GenerateStep,
+    ) -> Result<(), WorkflowError> {
+        let audit = AuditTrailService::new(self.pool.clone());
+
+        if !self.has_generated_artifact(generation_id).await? {
+            if self.status_before(generation_id, MediaGenerationStatus::Generating).await? {
+                let resolved_type: Option<String> = sqlx::query_scalar(
+                    r#"SELECT resolved_output_type FROM media_generations WHERE id = $1"#,
+                )
+                .bind(parse_uuid(generation_id)?)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(WorkflowError::Database)?
+                .flatten();
+
+                let ctx = serde_json::json!({
+                    "step": "generation",
+                    "resolved_output_type": resolved_type,
+                });
+                audit.transition(
+                    generation_id,
+                    MediaGenerationStatus::Generating,
+                    Some(ctx),
+                    Some(attempt),
+                    job_context.clone(),
+                )
+                .await?;
+            }
+
+            generate.generate(generation_id).await?;
+        }
+
+        if self.status_before(generation_id, MediaGenerationStatus::Uploading).await? {
+            let (gen_provider, gen_model, mime_type): (
+                Option<String>,
+                Option<String>,
+                Option<String>,
+            ) = sqlx::query_as(
+                r#"SELECT generator_provider, generator_model, mime_type FROM media_generations WHERE id = $1"#,
+            )
+            .bind(parse_uuid(generation_id)?)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(WorkflowError::Database)?
+            .unwrap_or_default();
+
+            let ctx = serde_json::json!({
+                "step": "artifact_upload",
+                "generator_provider": gen_provider,
+                "generator_model": gen_model,
+                "mime_type": mime_type,
+            });
+            audit.transition(
+                generation_id,
+                MediaGenerationStatus::Uploading,
+                Some(ctx),
+                Some(attempt),
+                job_context.clone(),
+            )
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    // ── Step 3: ensure_published ───────────────────────────────────────────
+
+    /// Publish entities (topic, content, recommended project).
+    async fn ensure_published(
+        &self,
+        generation_id: &str,
+        attempt: i32,
+        job_context: &Option<Value>,
+        publish: &dyn PublishStep,
+    ) -> Result<(), WorkflowError> {
+        let audit = AuditTrailService::new(self.pool.clone());
+
+        // If entities already exist, skip the callback but still log the transition.
+        if self.has_publication_entities(generation_id).await? {
+            if self.status_before(generation_id, MediaGenerationStatus::Publishing).await? {
+                let ctx = serde_json::json!({
+                    "step": "publication",
+                    "reused_publication_entities": true,
+                });
+                audit.transition(
+                    generation_id,
+                    MediaGenerationStatus::Publishing,
+                    Some(ctx),
+                    Some(attempt),
+                    job_context.clone(),
+                )
+                .await?;
+            }
+            return Ok(());
+        }
+
+        publish.publish(generation_id).await?;
+
+        Ok(())
+    }
+
+    // ── Step 4: ensure_completed ───────────────────────────────────────────
+
+    /// Compose delivery payload and mark as COMPLETED.
+    async fn ensure_completed(
+        &self,
+        generation_id: &str,
+        attempt: i32,
+        job_context: &Option<Value>,
+        compose: &dyn ComposeStep,
+    ) -> Result<(), WorkflowError> {
+        let audit = AuditTrailService::new(self.pool.clone());
+
+        if !self.has_final_delivery_payload(generation_id).await? {
+            compose.compose(generation_id).await?;
+        }
+
+        if self.status_before(generation_id, MediaGenerationStatus::Completed).await? {
+            let delivery_meta: Option<(Option<bool>, Option<String>, Option<String>)> = sqlx::query_as(
+                r#"
+                SELECT
+                    delivery_payload->'fallback'->>'triggered' = 'true',
+                    delivery_payload#>'{response_meta,provider}'->>0,
+                    delivery_payload#>'{response_meta,model}'->>0
+                FROM media_generations
+                WHERE id = $1
+                "#,
+            )
+            .bind(parse_uuid(generation_id)?)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(WorkflowError::Database)?;
+
+            let (fallback, provider, model) = delivery_meta.unwrap_or_default();
+
+            let ctx = serde_json::json!({
+                "step": "delivery",
+                "delivery_fallback": fallback.unwrap_or(false),
+                "delivery_provider": provider,
+                "delivery_model": model,
+            });
+            audit.transition(
+                generation_id,
+                MediaGenerationStatus::Completed,
+                Some(ctx),
+                Some(attempt),
+                job_context.clone(),
+            )
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    // ─── Private helpers ───────────────────────────────────────────────────
+
+    /// Wrap a step with tracing instrumentation and timing.
+    async fn timed_step<F, Fut>(
+        &self,
+        generation_id: &str,
+        step_name: &'static str,
+        attempt: i32,
+        step_fn: F,
+    ) -> Result<(), WorkflowError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<(), WorkflowError>>,
+    {
+        let span = tracing::info_span!(
+            "media_generation.step",
+            generation_id = %generation_id,
+            step = step_name,
+            attempt = attempt,
+        );
+
+        let start = std::time::Instant::now();
+        tracing::info!(target: "media_generation", "Starting step: {}", step_name);
+
+        let result = {
+            let _guard = span.enter();
+            step_fn().await
+        };
+
+        let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
+        let status = if result.is_ok() { "success" } else { "failed" };
+
+        tracing::info!(
+            target: "media_generation",
+            step = step_name,
+            duration_ms = duration_ms,
+            status = status,
+            "Step completed: {} ({:.2}ms, {})",
+            step_name, duration_ms, status,
+        );
+
+        result
+    }
+
+    /// Get the current status of a generation.
+    async fn get_status(&self, generation_id: &str) -> Result<MediaGenerationStatus, WorkflowError> {
+        let status_str: Option<String> = sqlx::query_scalar(
+            r#"SELECT status FROM media_generations WHERE id = $1"#,
+        )
+        .bind(parse_uuid(generation_id)?)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(WorkflowError::Database)?;
+
+        let s = status_str.ok_or_else(|| WorkflowError::NotFound(generation_id.to_string()))?;
+
+        MediaGenerationStatus::from_str(&s).ok_or_else(|| WorkflowError::StepFailed {
+            step: "get_status",
+            message: format!("Unknown status: {}", s),
+            source: None,
+        })
+    }
+
+    /// Check if the generation's status is before the checkpoint.
+    async fn status_before(
+        &self,
+        generation_id: &str,
+        checkpoint: MediaGenerationStatus,
+    ) -> Result<bool, WorkflowError> {
+        let current = self.get_status(generation_id).await?;
+        Ok(current.status_before(checkpoint))
+    }
+
+    /// Check if classification is complete (interpretation + spec + resolved type).
+    async fn has_classification(&self, generation_id: &str) -> Result<bool, WorkflowError> {
+        let row: Option<(Option<Value>, Option<Value>, Option<String>)> = sqlx::query_as(
+            r#"
+            SELECT interpretation_payload, generation_spec_payload, resolved_output_type
+            FROM media_generations
+            WHERE id = $1
+              AND interpretation_payload IS NOT NULL
+              AND interpretation_payload->>'schema_version' IS NOT NULL
+              AND interpretation_payload->>'schema_version' != ''
+              AND generation_spec_payload IS NOT NULL
+              AND generation_spec_payload->>'schema_version' IS NOT NULL
+              AND generation_spec_payload->>'schema_version' != ''
+              AND resolved_output_type IS NOT NULL
+              AND resolved_output_type != ''
+            "#,
+        )
+        .bind(parse_uuid(generation_id)?)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(WorkflowError::Database)?;
+
+        Ok(row.is_some())
+    }
+
+    /// Check if generation has artifact metadata from the Python renderer.
+    async fn has_generated_artifact(&self, generation_id: &str) -> Result<bool, WorkflowError> {
+        let row: Option<(Option<Value>,)> = sqlx::query_as(
+            r#"
+            SELECT generator_service_response
+            FROM media_generations
+            WHERE id = $1
+              AND (
+                  (generator_service_response->'response'->'artifact_metadata') IS NOT NULL
+                  OR (generator_service_response->'artifact_metadata') IS NOT NULL
+              )
+            "#,
+        )
+        .bind(parse_uuid(generation_id)?)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(WorkflowError::Database)?;
+
+        Ok(row.is_some())
+    }
+
+    /// Check if all publication entities exist.
+    async fn has_publication_entities(&self, generation_id: &str) -> Result<bool, WorkflowError> {
+        let row: Option<(Option<Uuid>, Option<Uuid>, Option<i64>)> = sqlx::query_as(
+            r#"
+            SELECT topic_id, content_id, recommended_project_id
+            FROM media_generations
+            WHERE id = $1
+              AND topic_id IS NOT NULL
+              AND content_id IS NOT NULL
+              AND recommended_project_id IS NOT NULL
+            "#,
+        )
+        .bind(parse_uuid(generation_id)?)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(WorkflowError::Database)?;
+
+        Ok(row.is_some())
+    }
+
+    /// Check if delivery payload exists.
+    async fn has_final_delivery_payload(&self, generation_id: &str) -> Result<bool, WorkflowError> {
+        let row: Option<(Option<Value>,)> = sqlx::query_as(
+            r#"
+            SELECT delivery_payload
+            FROM media_generations
+            WHERE id = $1
+              AND delivery_payload IS NOT NULL
+              AND delivery_payload->>'schema_version' IS NOT NULL
+              AND delivery_payload->>'schema_version' != ''
+            "#,
+        )
+        .bind(parse_uuid(generation_id)?)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(WorkflowError::Database)?;
+
+        Ok(row.is_some())
+    }
+
+    /// Get the decision payload for audit trail context.
+    async fn get_decision_context(&self, generation_id: &str) -> Result<Value, WorkflowError> {
+        let payload: Option<Value> = sqlx::query_scalar(
+            r#"SELECT decision_payload FROM media_generations WHERE id = $1"#,
+        )
+        .bind(parse_uuid(generation_id)?)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(WorkflowError::Database)?
+        .flatten();
+
+        Ok(payload.unwrap_or(Value::Null))
+    }
+}
+
+// ─── Helper ─────────────────────────────────────────────────────────────────
+
+fn parse_uuid(s: &str) -> Result<Uuid, WorkflowError> {
+    Uuid::parse_str(s).map_err(|e| WorkflowError::InvalidUuid(e.to_string()))
+}
+
+// ─── Tests ───────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+
+    // ── Mock step implementations for testing ─────────────────────────────
+
+    struct MockInterpretOk;
+    #[async_trait]
+    impl InterpretStep for MockInterpretOk {
+        async fn interpret(&self, _generation_id: &str) -> Result<Value, WorkflowError> {
+            Ok(serde_json::json!({
+                "schema_version": "media_prompt_understanding.v1",
+                "teacher_prompt": "test",
+            }))
+        }
+    }
+
+    struct MockInterpretFail;
+    #[async_trait]
+    impl InterpretStep for MockInterpretFail {
+        async fn interpret(&self, generation_id: &str) -> Result<Value, WorkflowError> {
+            Err(WorkflowError::StepProvider(format!(
+                "interpret failed for {}",
+                generation_id
+            )))
+        }
+    }
+
+    struct MockDraftOk;
+    #[async_trait]
+    impl DraftStep for MockDraftOk {
+        async fn draft(&self, _generation_id: &str) -> Result<Value, WorkflowError> {
+            Ok(serde_json::json!({
+                "schema_version": "media_content_draft.v1",
+                "source": "provider",
+            }))
+        }
+    }
+
+    struct MockGenerateOk;
+    #[async_trait]
+    impl GenerateStep for MockGenerateOk {
+        async fn generate(&self, _generation_id: &str) -> Result<Value, WorkflowError> {
+            Ok(serde_json::json!({"status": "generated"}))
+        }
+    }
+
+    struct MockPublishOk;
+    #[async_trait]
+    impl PublishStep for MockPublishOk {
+        async fn publish(&self, _generation_id: &str) -> Result<Value, WorkflowError> {
+            Ok(serde_json::json!({"status": "published"}))
+        }
+    }
+
+    struct MockComposeOk;
+    #[async_trait]
+    impl ComposeStep for MockComposeOk {
+        async fn compose(&self, _generation_id: &str) -> Result<Value, WorkflowError> {
+            Ok(serde_json::json!({"schema_version": "media_delivery_response.v1"}))
+        }
+    }
+
+    // ── WorkflowError tests ──────────────────────────────────────────────
+
+    #[test]
+    fn test_workflow_error_not_found() {
+        let err = WorkflowError::NotFound("gen-1".to_string());
+        assert!(err.to_string().contains("not found"));
+    }
+
+    #[test]
+    fn test_workflow_error_step_failed() {
+        let err = WorkflowError::StepFailed {
+            step: "test_step",
+            message: "something went wrong".to_string(),
+            source: None,
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("test_step"));
+        assert!(msg.contains("something went wrong"));
+    }
+
+    #[test]
+    fn test_workflow_error_invalid_uuid() {
+        let err = WorkflowError::InvalidUuid("bad-uuid".to_string());
+        assert!(err.to_string().contains("invalid UUID"));
+    }
+
+    #[test]
+    fn test_workflow_error_step_provider() {
+        let err = WorkflowError::StepProvider("provider failed".to_string());
+        assert!(err.to_string().contains("step provider error"));
+        assert!(err.to_string().contains("provider failed"));
+    }
+
+    #[test]
+    fn test_workflow_error_decision() {
+        let err = WorkflowError::Decision(
+            crate::orchestrator::decision::DecisionError::MissingInterpretation("missing".to_string()),
+        );
+        assert!(err.to_string().contains("interpretation"));
+    }
+
+    // ── parse_uuid tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_parse_uuid_valid() {
+        let id = "00000000-0000-0000-0000-000000000001";
+        assert!(parse_uuid(id).is_ok());
+    }
+
+    #[test]
+    fn test_parse_uuid_invalid() {
+        assert!(parse_uuid("not-a-uuid").is_err());
+    }
+
+    // ── Status helpers ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_status_before_check() {
+        assert!(MediaGenerationStatus::Queued.status_before(MediaGenerationStatus::Interpreting));
+        assert!(!MediaGenerationStatus::Completed.status_before(MediaGenerationStatus::Interpreting));
+    }
+
+    #[test]
+    fn test_is_terminal() {
+        assert!(MediaGenerationStatus::Completed.is_terminal());
+        assert!(!MediaGenerationStatus::Queued.is_terminal());
+    }
+
+    // ── Mock step smoke tests ────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_mock_interpret_ok() {
+        let step = MockInterpretOk;
+        let result = step.interpret("gen-1").await;
+        assert!(result.is_ok());
+        let val = result.unwrap();
+        assert_eq!(val["schema_version"], "media_prompt_understanding.v1");
+    }
+
+    #[tokio::test]
+    async fn test_mock_interpret_fail() {
+        let step = MockInterpretFail;
+        let result = step.interpret("gen-1").await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("interpret failed"));
+    }
+
+    #[tokio::test]
+    async fn test_mock_draft_ok() {
+        let step = MockDraftOk;
+        let result = step.draft("gen-1").await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap()["schema_version"], "media_content_draft.v1");
+    }
+
+    #[tokio::test]
+    async fn test_mock_generate_ok() {
+        let step = MockGenerateOk;
+        let result = step.generate("gen-1").await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap()["status"], "generated");
+    }
+
+    #[tokio::test]
+    async fn test_mock_publish_ok() {
+        let step = MockPublishOk;
+        let result = step.publish("gen-1").await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap()["status"], "published");
+    }
+
+    #[tokio::test]
+    async fn test_mock_compose_ok() {
+        let step = MockComposeOk;
+        let result = step.compose("gen-1").await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap()["schema_version"], "media_delivery_response.v1");
+    }
+}

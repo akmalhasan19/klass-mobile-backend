@@ -1099,7 +1099,7 @@ mod tests {
             "response": {
                 "raw_completion": "{}",
                 "provider_model": "deepseek/deepseek-v4-flash",
-                "finish_reason": null as Option<String>,
+                "finish_reason": null,
             },
             "used_fallback": false,
             "llm_provider": "openrouter",

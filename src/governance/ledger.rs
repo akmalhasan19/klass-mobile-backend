@@ -342,6 +342,7 @@ mod tests {
             estimated_cost_usd: Some(rust_decimal::Decimal::new(42, 6)), // 0.000042
             cache_key: Some("abc123...".to_string()),
             metadata: serde_json::json!({"source": "test"}),
+            completed_at: None,
         };
 
         assert_eq!(input.route, "interpret");
@@ -381,6 +382,7 @@ mod tests {
             estimated_cost_usd: None,
             cache_key: None,
             metadata: serde_json::json!({"attempted_fallback": true}),
+            completed_at: None,
         };
 
         assert_eq!(input.final_status, "failed");
@@ -419,6 +421,7 @@ mod tests {
             estimated_cost_usd: Some(rust_decimal::Decimal::ZERO),
             cache_key: Some("def456...".to_string()),
             metadata: serde_json::json!({"cache_source": "interpretation_cache"}),
+            completed_at: None,
         };
 
         assert_eq!(input.cache_status.as_str(), "hit");
