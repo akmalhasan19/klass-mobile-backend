@@ -42,7 +42,12 @@ impl AppState {
             .timeout(std::time::Duration::from_secs(90))
             .build()?;
 
-        let taxonomy = Arc::new(load_taxonomy()?);
+        let taxonomy = Arc::new(load_taxonomy());
+
+        // Seed subjects and sub_subjects if empty
+        if let Err(e) = crate::db::seed::seed_if_empty(&db_pool).await {
+            tracing::warn!(error = %e, "seed: failed to seed subjects from taxonomy — continuing anyway");
+        }
 
         Ok(Self {
             config,
@@ -75,8 +80,8 @@ async fn build_s3_client(config: &AppConfig) -> S3Client {
     S3Client::from_conf(s3_config)
 }
 
-fn load_taxonomy() -> Result<TaxonomyCatalog, crate::recommendation::taxonomy::TaxonomyError> {
-    let catalog = TaxonomyCatalog::load_default()?;
-    tracing::info!(path = %catalog.source_path.display(), "taxonomy catalog loaded");
-    Ok(catalog)
+fn load_taxonomy() -> TaxonomyCatalog {
+    let catalog = TaxonomyCatalog::load_default();
+    tracing::info!("taxonomy catalog loaded from embedded JSON");
+    catalog
 }

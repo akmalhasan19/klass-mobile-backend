@@ -231,51 +231,51 @@
 
 **Goal:** `GET /homepage-recommendations` fully featured (admin-curated + topic normalized + personalization + system assignments).
 
-- [ ] **4.1 Relocate `kurikulum_merdeka_structure.json`**
-  - [ ] Move `resources/json/kurikulum_merdeka_structure.json` → `src/recommendation/data/`
-  - [ ] Embed via `include_str!("data/kurikulum_merdeka_structure.json")`
-  - [ ] Keep `resources/` copy for now (Laravel still runs parallel)
-- [ ] **4.2 `src/recommendation/mod.rs`**
-  - [ ] Declare submodules: `taxonomy`, `aggregation`, `personalization`, `assignments`
-- [ ] **4.3 `src/recommendation/taxonomy.rs`** (port `MediaPromptTaxonomyInferenceService`)
-  - [ ] `TaxonomyCatalog` struct loaded once at boot (`Arc<TaxonomyCatalog>` in `AppState`)
-  - [ ] `SubjectsJsonTaxonomyCatalog` parser
-  - [ ] `infer(prompt) -> TaxonomyInferenceResult`
-  - [ ] Scoring weights EXACTLY: subject phrase 7, sub_subject phrase 12, token overlaps 1.5/2.75/0.75/0.35
-  - [ ] Normalize /24, threshold 0.25 OR phrase match
-  - [ ] Detect jenjang (SD/SMP/SMA/SMK), class number (numeric + roman), semester, bab
-  - [ ] Output schema `media_prompt_taxonomy_inference.v1` with confidence label, best match (subject_id/sub_subject_id resolved from DB), candidate matches
-- [ ] **4.4 `src/recommendation/personization.rs`** (port `RecommendationPersonalizationService`)
-  - [ ] `resolve(user: Option<User>) -> PersonalizationContext`
-  - [ ] Guests → `global_feed` mode
-  - [ ] Authenticated → aggregate authored-topic activity by sub_subject
-  - [ ] Compute preferred (matching primary subject) + secondary sub_subject_ids
-  - [ ] `subject_anchor` from profile or fallback activity
-- [ ] **4.5 `src/recommendation/aggregation.rs`** (port `RecommendationAggregationService`)
-  - [ ] `build_feed_snapshot(at, ctx) -> Snapshot { items, source_status, personalization }`
-  - [ ] Combine admin-curated `RecommendedProject` (`visibleAt`) + normalized Topic items
-  - [ ] `selectSystemGeneratedCandidates` — apply personalization when signals available
-  - [ ] `build_system_distribution_summary(min_user_count)` — grouped by sub_subject, cap `maximum_items_per_sub_subject`
-- [ ] **4.6 `src/recommendation/assignments.rs`**
-  - [ ] `SystemRecommendationAssignmentsRepo` with upsert `(user_id, recommendation_key)` ON CONFLICT update `last_distributed_at`
-- [ ] **4.7 `src/db/repositories/recommended_projects.rs`**
-  - [ ] `find_visible_at(at)`, `find_by_id`, `create`, `update`, `delete`, `toggle_active`, `show_now`
-  - [ ] Filter by `source_type`, `status`
-- [ ] **4.8 `src/api/rest/homepage_recommendations.rs`**
-  - [ ] `GET /v1/homepage-recommendations?limit=`
-  - [ ] Load `HomepageSection` by key `personalized_project_recommendations.homepage.section_key` (`project_recommendations`)
-  - [ ] Resolve optional user (Bearer header)
-  - [ ] If section disabled → return empty collection + context meta
-  - [ ] Otherwise `build_feed_snapshot` + system assignments tracking
-  - [ ] Return `RecommendedProjectRecommendationCollection` with `{section, limit, personalization, source_status}` meta
-- [ ] **4.9 Subjects/sub_subjects seed verification**
-  - [ ] Check if Neon has data (run SELECT count FROM subjects/sub_subjects)
-  - [ ] If empty, create migration `000016_seed_subjects_sub_subjects_from_taxonomy.sql` (extract from `kurikulum_merdeka_structure.json`)
-- [ ] **4.10 Tests `tests/recommendation.rs`**
-  - [ ] Snapshot test: input "handout pecahan kelas 5 SD" → expected subject (math) + sub_subject match
-  - [ ] Confidence threshold boundary
-  - [ ] Guest vs authenticated personalization contexts
-  - [ ] Feed snapshot composition (admin + system items)
+- [x] **4.1 Relocate `kurikulum_merdeka_structure.json`**
+  - [x] Move `resources/json/kurikulum_merdeka_structure.json` → `src/recommendation/data/`
+  - [x] Embed via `include_str!("data/kurikulum_merdeka_structure.json")`
+  - [x] Keep `resources/` copy for now (Laravel still runs parallel)
+- [x] **4.2 `src/recommendation/mod.rs`**
+  - [x] Declare submodules: `taxonomy`, `aggregation`, `personalization`, `assignments`
+- [x] **4.3 `src/recommendation/taxonomy.rs`** (port `MediaPromptTaxonomyInferenceService`)
+  - [x] `TaxonomyCatalog` struct loaded once at boot (`Arc<TaxonomyCatalog>` in `AppState`)
+  - [x] `SubjectsJsonTaxonomyCatalog` parser
+  - [x] `infer(prompt) -> TaxonomyInferenceResult`
+  - [x] Scoring weights EXACTLY: subject phrase 7, sub_subject phrase 12, token overlaps 1.5/2.75/0.75/0.35
+  - [x] Normalize /24, threshold 0.25 OR phrase match
+  - [x] Detect jenjang (SD/SMP/SMA/SMK), class number (numeric + roman), semester, bab
+  - [x] Output schema `media_prompt_taxonomy_inference.v1` with confidence label, best match (subject_id/sub_subject_id resolved from DB), candidate matches
+- [x] **4.4 `src/recommendation/personization.rs`** (port `RecommendationPersonalizationService`)
+  - [x] `resolve(user: Option<User>) -> PersonalizationContext`
+  - [x] Guests → `global_feed` mode
+  - [x] Authenticated → aggregate authored-topic activity by sub_subject
+  - [x] Compute preferred (matching primary subject) + secondary sub_subject_ids
+  - [x] `subject_anchor` from profile or fallback activity
+- [x] **4.5 `src/recommendation/aggregation.rs`** (port `RecommendationAggregationService`)
+  - [x] `build_feed_snapshot(at, ctx) -> Snapshot { items, source_status, personalization }`
+  - [x] Combine admin-curated `RecommendedProject` (`visibleAt`) + normalized Topic items
+  - [x] `selectSystemGeneratedCandidates` — apply personalization when signals available
+  - [x] `build_system_distribution_summary(min_user_count)` — grouped by sub_subject, cap `maximum_items_per_sub_subject`
+- [x] **4.6 `src/recommendation/assignments.rs`**
+  - [x] `SystemRecommendationAssignmentsRepo` with upsert `(user_id, recommendation_key)` ON CONFLICT update `last_distributed_at`
+- [x] **4.7 `src/db/repositories/recommended_projects.rs`**
+  - [x] `find_visible_at(at)`, `find_by_id`, `create`, `update`, `delete`, `toggle_active`, `show_now`
+  - [x] Filter by `source_type`, `status`
+- [x] **4.8 `src/api/rest/homepage_recommendations.rs`**
+  - [x] `GET /v1/homepage-recommendations?limit=`
+  - [x] Load `HomepageSection` by key `personalized_project_recommendations.homepage.section_key` (`project_recommendations`)
+  - [x] Resolve optional user (Bearer header)
+  - [x] If section disabled → return empty collection + context meta
+  - [x] Otherwise `build_feed_snapshot` + system assignments tracking
+  - [x] Return `RecommendedProjectRecommendationCollection` with `{section, limit, personalization, source_status}` meta
+- [x] **4.9 Subjects/sub_subjects seed verification**
+  - [x] Check if Neon has data (run SELECT count FROM subjects/sub_subjects)
+  - [x] If empty, create migration `000016_seed_subjects_sub_subjects_from_taxonomy.sql` (extract from `kurikulum_merdeka_structure.json`)
+- [x] **4.10 Tests `tests/recommendation.rs`**
+  - [x] Snapshot test: input "handout pecahan kelas 5 SD" → expected subject (math) + sub_subject match
+  - [x] Confidence threshold boundary
+  - [x] Guest vs authenticated personalization contexts
+  - [x] Feed snapshot composition (admin + system items)
 
 ---
 

@@ -1,4 +1,5 @@
 pub mod activity_logs;
+pub mod assignments;
 pub mod contents;
 pub mod gallery;
 pub mod homepage_sections;

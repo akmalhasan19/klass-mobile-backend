@@ -1,5 +1,6 @@
 pub mod pagination;
 pub mod repositories;
+pub mod seed;
 
 use sqlx::PgPool;
 

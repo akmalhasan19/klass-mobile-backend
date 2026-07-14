@@ -2304,6 +2304,7 @@ dependencies = [
  "prost",
  "prost-build",
  "redis",
+ "regex",
  "reqwest",
  "rust_decimal",
  "serde",

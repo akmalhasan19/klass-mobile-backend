@@ -16,6 +16,57 @@ pub struct Principal {
     pub role: String,
 }
 
+/// Optional version of `Principal` that returns `None` when no Bearer token
+/// is present, instead of rejecting the request. Used by endpoints where
+/// authentication is optional (e.g. homepage recommendations).
+///
+/// If a token IS present but is invalid or expired, it still returns `None`
+/// (effectively treating the user as a guest).
+#[derive(Debug, Clone)]
+pub struct OptionalPrincipal(pub Option<Principal>);
+
+impl<S> axum::extract::FromRequestParts<S> for OptionalPrincipal
+where
+    S: Send + Sync,
+    AppState: axum::extract::FromRef<S>,
+{
+    type Rejection = Response;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let State(app_state) = State::<AppState>::from_request_parts(parts, state)
+            .await
+            .map_err(|e| e.into_response())?;
+
+        let auth_header = match parts.headers.get(AUTHORIZATION).and_then(|v| v.to_str().ok()) {
+            Some(h) => h,
+            None => return Ok(OptionalPrincipal(None)),
+        };
+
+        let token = match auth_header.strip_prefix("Bearer ") {
+            Some(t) if !t.is_empty() => t,
+            _ => return Ok(OptionalPrincipal(None)),
+        };
+
+        let token_record = match crate::auth::tokens::verify_token(&app_state.db_pool, token).await {
+            Ok(Some(record)) => record,
+            _ => return Ok(OptionalPrincipal(None)),
+        };
+
+        let user = match crate::db::repositories::users::PgUsersRepo::new(app_state.db_pool.clone())
+            .find_by_id(token_record.tokenable_id)
+            .await
+        {
+            Ok(Some(u)) => u,
+            _ => return Ok(OptionalPrincipal(None)),
+        };
+
+        Ok(OptionalPrincipal(Some(Principal {
+            user_id: user.id,
+            role: user.role,
+        })))
+    }
+}
+
 impl<S> axum::extract::FromRequestParts<S> for Principal
 where
     S: Send + Sync,
