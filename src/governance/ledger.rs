@@ -90,7 +90,7 @@ pub enum CacheStatus {
 }
 
 impl CacheStatus {
-    fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             CacheStatus::Hit => "hit",
             CacheStatus::Miss => "miss",

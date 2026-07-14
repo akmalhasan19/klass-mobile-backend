@@ -30,7 +30,7 @@ pub enum RateLimitRoute {
 }
 
 impl RateLimitRoute {
-    fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             RateLimitRoute::All => ROUTE_ALL,
             RateLimitRoute::Interpret => ROUTE_INTERPRET,
@@ -59,7 +59,7 @@ pub enum ScopeType {
 }
 
 impl ScopeType {
-    fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             ScopeType::Global => "global",
             ScopeType::Route => "route",
@@ -78,7 +78,7 @@ pub enum WindowUnit {
 }
 
 impl WindowUnit {
-    fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             WindowUnit::Minute => "minute",
             WindowUnit::Hour => "hour",
@@ -519,7 +519,7 @@ pub async fn preflight_check(
     })
 }
 
-fn exhausted_decision(route: &str, _provider: &str, _model: &str) -> PreflightDecision {
+pub fn exhausted_decision(route: &str, _provider: &str, _model: &str) -> PreflightDecision {
     // The action is "deny" for interpret, "degrade" for respond.
     let action = match route {
         ROUTE_INTERPRET => ExhaustionAction::Deny,

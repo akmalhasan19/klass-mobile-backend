@@ -13,6 +13,7 @@
 //! - Respond: delivery composition with artifact + publication → validation
 //! - Contract validation failures trigger fallback gracefully
 
+use klass_gateway::providers::Provider;
 use mockito::Server;
 
 // ─── Mock provider response builders ───────────────────────────────────────
