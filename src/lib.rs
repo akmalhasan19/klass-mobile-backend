@@ -7,6 +7,7 @@ pub mod db;
 pub mod error;
 pub mod governance;
 pub mod llm;
+pub mod matching;
 pub mod media_gen;
 pub mod orchestrator;
 pub mod providers;

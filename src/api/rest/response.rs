@@ -45,6 +45,20 @@ pub fn created_with_message<T: Serialize>(
     )
 }
 
+pub fn accepted_with_message<T: Serialize>(
+    message: &str,
+    data: T,
+) -> (StatusCode, Json<serde_json::Value>) {
+    (
+        StatusCode::ACCEPTED,
+        Json(serde_json::json!({
+            "success": true,
+            "message": message,
+            "data": data,
+        })),
+    )
+}
+
 pub fn paginated<T: Serialize>(
     data: Vec<T>,
     meta: PaginationMeta,

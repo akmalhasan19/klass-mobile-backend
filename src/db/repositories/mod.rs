@@ -1,10 +1,12 @@
 pub mod activity_logs;
 pub mod assignments;
 pub mod contents;
+pub mod freelancer_matches;
 pub mod gallery;
 pub mod homepage_sections;
 pub mod marketplace_tasks;
 pub mod media_files;
+pub mod media_generations;
 pub mod personal_access_tokens;
 pub mod recommended_projects;
 pub mod student_progress;

@@ -460,43 +460,43 @@
 
 **Goal:** Teacher + freelancer endpoints used by Flutter.
 
-- [ ] **7.1 DB migration `000016_alter_marketplace_tasks_status_to_varchar.sql`**
-  - [ ] ALTER `status` enum to VARCHAR(20) without CHECK constraint
-  - [ ] Drop existing enum constraint
-  - [ ] Backfill existing rows (no-op, keeps values)
-- [ ] **7.2 `src/db/repositories/media_generations.rs`**
-  - [ ] `MediaGeneration` struct `#[derive(FromRow)]` with all fields incl. JSONB columns as `serde_json::Value`
-  - [ ] `find_recent_for_teacher(teacher_id, limit=20)` — eager `subject`, `sub_subject.subject`, `topic`, `content`, `recommended_project`
-  - [ ] `find_by_id_for_teacher(id, teacher_id)`
-  - [ ] `find_chain(parent_id)` — walk `get_original_generation` to root (depth 50) + direct children oldest-first
-  - [ ] `insert`, `update_status`, `update_payloads`
-- [ ] **7.3 `src/api/rest/media_generations.rs`** (4 teacher-only endpoints)
-  - [ ] `require_teacher(request)` helper → 401 if not teacher
-  - [ ] `GET /media-generations?parent_id=` — chain walk or 20 recent
-  - [ ] `POST /media-generations` — `SubmissionService::create_or_reuse`; if was_created → `queue.enqueue`. Return 202 + `MediaGenerationResource`
-  - [ ] `GET /media-generations/{id}` — scoped to teacher
-  - [ ] `POST /media-generations/{id}/regenerate` — parent must be terminal, `create_regeneration`, enqueue
-- [ ] **7.4 `MediaGenerationResource` serde struct**
-  - [ ] All public fields + nested `subject`, `sub_subject`, `topic`, `content`, `recommended_project`
-  - [ ] Match Laravel resource shape exactly for Flutter compatibility
-- [ ] **7.5 `src/matching/mod.rs`** (port `FreelancerMatchingService`)
-  - [ ] `find_best_matches(generation, limit=5)`
-  - [ ] Fetch all `role=freelancer` users
-  - [ ] Deterministic MD5-derived scores: portfolio 0.4-1.0, success 0.7-1.0, availability 0.5-1.0
-  - [ ] Combine `0.5*p + 0.3*s + 0.2*a`
-  - [ ] Return top N with `portfolio_relevance_score`, `success_rate`, `availability_score`, `match_score`
-- [ ] **7.6 `src/db/repositories/freelancer_matches.rs`**
-  - [ ] `upsert(media_generation_id, freelancer_id, scores)`, `find_for_generation(id)`
-  - [ ] Unique constraint `(media_generation_id, freelancer_id)`
-- [ ] **7.7 `src/api/rest/freelancer.rs`**
-  - [ ] `POST /media-generations/{id}/suggest-freelancers` — `find_best_matches`, clamp `max_suggestions` 1..10, upsert `freelancer_matches`, return list
-  - [ ] `POST /media-generations/{id}/hire-freelancer` — validate generation terminal + has `content_id`
-  - [ ] `auto_suggest` mode → create `MarketplaceTask` `task_type=suggestion, status=assigned, suggested_freelancer_id`
-  - [ ] `manual_task` mode → create `MarketplaceTask` `task_type=bid, status=open_for_bid`
-- [ ] **7.8 Tests**
-  - [ ] `tests/api_media_gen.rs` — store → 202, show, regenerate (terminal parent), index (parent_id chain)
-  - [ ] `tests/api_freelancer.rs` — suggest deterministic, hire auto_suggest + manual_task
-  - [ ] `tests/matching.rs` — score determinism for given user set
+- [x] **7.1 DB migration `000016_alter_marketplace_tasks_status_to_varchar.sql`**
+  - [x] ALTER `status` enum to VARCHAR(20) without CHECK constraint
+  - [x] Drop existing enum constraint
+  - [x] Backfill existing rows (no-op, keeps values)
+- [x] **7.2 `src/db/repositories/media_generations.rs`**
+  - [x] `MediaGeneration` struct `#[derive(FromRow)]` with all fields incl. JSONB columns as `serde_json::Value`
+  - [x] `find_recent_for_teacher(teacher_id, limit=20)` — eager `subject`, `sub_subject.subject`, `topic`, `content`, `recommended_project`
+  - [x] `find_by_id_for_teacher(id, teacher_id)`
+  - [x] `find_chain(parent_id)` — walk `get_original_generation` to root (depth 50) + direct children oldest-first
+  - [x] `insert`, `update_status`, `update_payloads`
+- [x] **7.3 `src/api/rest/media_generations.rs`** (4 teacher-only endpoints)
+  - [x] `require_teacher(request)` helper → 401 if not teacher
+  - [x] `GET /media-generations?parent_id=` — chain walk or 20 recent
+  - [x] `POST /media-generations` — `SubmissionService::create_or_reuse`; if was_created → `queue.enqueue`. Return 202 + `MediaGenerationResource`
+  - [x] `GET /media-generations/{id}` — scoped to teacher
+  - [x] `POST /media-generations/{id}/regenerate` — parent must be terminal, `create_regeneration`, enqueue
+- [x] **7.4 `MediaGenerationResource` serde struct**
+  - [x] All public fields + nested `subject`, `sub_subject`, `topic`, `content`, `recommended_project`
+  - [x] Match Laravel resource shape exactly for Flutter compatibility
+- [x] **7.5 `src/matching/mod.rs`** (port `FreelancerMatchingService`)
+  - [x] `find_best_matches(generation, limit=5)`
+  - [x] Fetch all `role=freelancer` users
+  - [x] Deterministic MD5-derived scores: portfolio 0.4-1.0, success 0.7-1.0, availability 0.5-1.0
+  - [x] Combine `0.5*p + 0.3*s + 0.2*a`
+  - [x] Return top N with `portfolio_relevance_score`, `success_rate`, `availability_score`, `match_score`
+- [x] **7.6 `src/db/repositories/freelancer_matches.rs`**
+  - [x] `upsert(media_generation_id, freelancer_id, scores)`, `find_for_generation(id)`
+  - [x] Unique constraint `(media_generation_id, freelancer_id)`
+- [x] **7.7 `src/api/rest/freelancer.rs`**
+  - [x] `POST /media-generations/{id}/suggest-freelancers` — `find_best_matches`, clamp `max_suggestions` 1..10, upsert `freelancer_matches`, return list
+  - [x] `POST /media-generations/{id}/hire-freelancer` — validate generation terminal + has `content_id`
+  - [x] `auto_suggest` mode → create `MarketplaceTask` `task_type=suggestion, status=assigned, suggested_freelancer_id`
+  - [x] `manual_task` mode → create `MarketplaceTask` `task_type=bid, status=open_for_bid`
+- [x] **7.8 Tests**
+  - [x] `tests/api_media_gen.rs` — store → 202, show, regenerate (terminal parent), index (parent_id chain)
+  - [x] `tests/api_freelancer.rs` — suggest deterministic, hire auto_suggest + manual_task
+  - [x] `tests/matching.rs` — score determinism for given user set
 
 ---
 

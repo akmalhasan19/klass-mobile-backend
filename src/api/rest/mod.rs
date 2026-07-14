@@ -2,10 +2,12 @@ pub mod admin;
 pub mod auth;
 pub mod avatar;
 pub mod contents;
+pub mod freelancer;
 pub mod gallery;
 pub mod homepage_recommendations;
 pub mod homepage_sections;
 pub mod marketplace_tasks;
+pub mod media_generations;
 pub mod response;
 pub mod student_progress;
 pub mod topics;
@@ -43,6 +45,13 @@ pub fn api_router() -> Router<AppState> {
         .route("/", get(marketplace_tasks::index))
         .route("/{id}", get(marketplace_tasks::show));
 
+    let media_generation_routes = Router::new()
+        .route("/", get(media_generations::index).post(media_generations::create))
+        .route("/{id}", get(media_generations::show))
+        .route("/{id}/regenerate", post(media_generations::regenerate))
+        .route("/{id}/suggest-freelancers", post(freelancer::suggest_freelancers))
+        .route("/{id}/hire-freelancer", post(freelancer::hire_freelancer));
+
     let student_progress_routes = Router::new()
         .route("/", get(student_progress::index))
         .route("/{id}", get(student_progress::show));
@@ -59,6 +68,7 @@ pub fn api_router() -> Router<AppState> {
         .nest("/topics", topic_routes)
         .nest("/contents", content_routes)
         .nest("/marketplace-tasks", marketplace_task_routes)
+        .nest("/media-generations", media_generation_routes)
         .nest("/student-progress", student_progress_routes)
         .nest("/homepage-sections", homepage_section_routes)
         .nest("/gallery", gallery_routes)
