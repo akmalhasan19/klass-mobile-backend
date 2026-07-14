@@ -122,10 +122,8 @@ pub fn require_role(
     axum::http::Request<axum::body::Body>,
     Next,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send>>
-     + Clone {
-    move |principal: Principal,
-          req: axum::http::Request<axum::body::Body>,
-          next: Next| {
+       + Clone {
+    move |principal: Principal, req: axum::http::Request<axum::body::Body>, next: Next| {
         let required = required_role;
         Box::pin(async move {
             if principal.role != required {

@@ -38,9 +38,7 @@ pub async fn upload_avatar(
         let name = field.name().unwrap_or("").to_string();
 
         if name == "file" {
-            content_type = field
-                .content_type()
-                .map(|ct| ct.to_string());
+            content_type = field.content_type().map(|ct| ct.to_string());
 
             let data = field
                 .bytes()
@@ -78,8 +76,8 @@ pub async fn upload_avatar(
 
     if let Some(old_url) = &user.avatar_url {
         if let Some(old_key) = r2::extract_object_key(old_url, &state.config.r2_public_url) {
-            let _ = r2::delete_object(&state.s3_client, &state.config.r2_bucket_name, &old_key)
-                .await;
+            let _ =
+                r2::delete_object(&state.s3_client, &state.config.r2_bucket_name, &old_key).await;
         }
     }
 

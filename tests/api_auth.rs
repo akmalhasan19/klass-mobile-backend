@@ -9,9 +9,8 @@ use tower::ServiceExt;
 async fn response_body(response: axum::response::Response) -> (StatusCode, Value) {
     let status = response.status();
     let body = response.into_body().collect().await.unwrap().to_bytes();
-    let json: Value = serde_json::from_slice(&body).unwrap_or_else(|_| {
-        serde_json::json!({"raw": String::from_utf8_lossy(&body).to_string()})
-    });
+    let json: Value = serde_json::from_slice(&body)
+        .unwrap_or_else(|_| serde_json::json!({"raw": String::from_utf8_lossy(&body).to_string()}));
     (status, json)
 }
 
@@ -216,15 +215,13 @@ async fn test_reset_password_flow_with_security_question() {
     let json: Value = serde_json::from_slice(&body).unwrap();
     let user_id = json["data"]["user"]["id"].as_i64().unwrap();
 
-    sqlx::query(
-        "UPDATE users SET security_question = $1, security_answer = $2 WHERE id = $3"
-    )
-    .bind("What is your pet's name?")
-    .bind(klass_gateway::auth::password::hash_password("fluffy").unwrap())
-    .bind(user_id)
-    .execute(&ctx.pool)
-    .await
-    .unwrap();
+    sqlx::query("UPDATE users SET security_question = $1, security_answer = $2 WHERE id = $3")
+        .bind("What is your pet's name?")
+        .bind(klass_gateway::auth::password::hash_password("fluffy").unwrap())
+        .bind(user_id)
+        .execute(&ctx.pool)
+        .await
+        .unwrap();
 
     let get_question_body = serde_json::json!({
         "email": test_email
@@ -238,7 +235,9 @@ async fn test_reset_password_flow_with_security_question() {
                 .method("POST")
                 .uri("/auth/get-security-question")
                 .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&get_question_body).unwrap()))
+                .body(Body::from(
+                    serde_json::to_string(&get_question_body).unwrap(),
+                ))
                 .unwrap(),
         )
         .await
@@ -250,7 +249,10 @@ async fn test_reset_password_flow_with_security_question() {
     let json: Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(json["success"], true);
-    assert_eq!(json["data"]["security_question"], "What is your pet's name?");
+    assert_eq!(
+        json["data"]["security_question"],
+        "What is your pet's name?"
+    );
 
     let reset_body = serde_json::json!({
         "email": test_email,

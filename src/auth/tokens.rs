@@ -106,12 +106,14 @@ pub async fn revoke_token(pool: &sqlx::PgPool, id: i64) -> anyhow::Result<()> {
 
 /// Revoke all tokens for a specific user
 pub async fn revoke_all_for_user(pool: &sqlx::PgPool, user_id: i64) -> anyhow::Result<()> {
-    sqlx::query("DELETE FROM personal_access_tokens WHERE tokenable_id = $1 AND tokenable_type = $2")
-        .bind(user_id)
-        .bind(TOKENABLE_TYPE)
-        .execute(pool)
-        .await
-        .map_err(|e| anyhow::anyhow!("failed to delete tokens for user: {e}"))?;
+    sqlx::query(
+        "DELETE FROM personal_access_tokens WHERE tokenable_id = $1 AND tokenable_type = $2",
+    )
+    .bind(user_id)
+    .bind(TOKENABLE_TYPE)
+    .execute(pool)
+    .await
+    .map_err(|e| anyhow::anyhow!("failed to delete tokens for user: {e}"))?;
     Ok(())
 }
 

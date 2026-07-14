@@ -108,13 +108,11 @@ pub async fn register(
     let repo = crate::db::repositories::users::PgUsersRepo::new(state.db_pool.clone());
 
     if let Some(_existing) = repo.find_by_email(&body.email).await? {
-        return Err(AppError::Conflict(
-            "email already registered".into(),
-        ));
+        return Err(AppError::Conflict("email already registered".into()));
     }
 
-    let password_hash = password::hash_password(&body.password)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let password_hash =
+        password::hash_password(&body.password).map_err(|e| AppError::Internal(e.to_string()))?;
 
     let user = repo
         .insert(InsertUser {
@@ -134,7 +132,10 @@ pub async fn register(
         token,
     };
 
-    Ok(response::created_with_message("registered successfully", data))
+    Ok(response::created_with_message(
+        "registered successfully",
+        data,
+    ))
 }
 
 /// POST /auth/login
@@ -310,9 +311,7 @@ pub async fn verify_and_reset_password(
         .ok_or_else(|| AppError::Validation("security question not set for this account".into()))?;
 
     if !password::verify_password(&body.security_answer, &stored_answer) {
-        return Err(AppError::Unauthorized(
-            "incorrect security answer".into(),
-        ));
+        return Err(AppError::Unauthorized("incorrect security answer".into()));
     }
 
     let new_hash = password::hash_password(&body.new_password)

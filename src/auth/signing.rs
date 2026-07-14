@@ -34,11 +34,7 @@ impl InterServiceRequestSigner {
     /// - `X-Klass-Request-Timestamp`: Unix epoch seconds
     /// - `X-Klass-Signature-Algorithm`: `hmac-sha256`
     /// - `X-Klass-Signature`: hex-encoded HMAC digest
-    pub fn build(
-        &self,
-        generation_id: &str,
-        payload: &[u8],
-    ) -> SignedRequest {
+    pub fn build(&self, generation_id: &str, payload: &[u8]) -> SignedRequest {
         let request_id = Uuid::new_v4().to_string();
         let timestamp = Utc::now().timestamp().to_string();
 
@@ -54,9 +50,8 @@ impl InterServiceRequestSigner {
     }
 
     fn sign(&self, timestamp: &str, payload: &[u8]) -> String {
-        let mut mac =
-            HmacSha256::new_from_slice(self.secret.as_bytes())
-                .expect("HMAC accepts any key length");
+        let mut mac = HmacSha256::new_from_slice(self.secret.as_bytes())
+            .expect("HMAC accepts any key length");
         mac.update(timestamp.as_bytes());
         mac.update(b".");
         mac.update(payload);

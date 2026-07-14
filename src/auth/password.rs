@@ -20,10 +20,16 @@ pub fn hash_password(plain: &str) -> anyhow::Result<String> {
 pub fn verify_password(plain: &str, hash: &str) -> bool {
     if hash.starts_with("$argon2") {
         verify_argon2(plain, hash)
-    } else if BCRYPT_PREFIXES.iter().any(|prefix| hash.starts_with(prefix)) {
+    } else if BCRYPT_PREFIXES
+        .iter()
+        .any(|prefix| hash.starts_with(prefix))
+    {
         verify_bcrypt(plain, hash)
     } else {
-        tracing::warn!(hash_prefix = &hash[..8.min(hash.len())], "unsupported password hash format");
+        tracing::warn!(
+            hash_prefix = &hash[..8.min(hash.len())],
+            "unsupported password hash format"
+        );
         false
     }
 }
@@ -73,7 +79,10 @@ mod tests {
         let password = "same_password";
         let hash1 = hash_password(password).unwrap();
         let hash2 = hash_password(password).unwrap();
-        assert_ne!(hash1, hash2, "different salts should produce different hashes");
+        assert_ne!(
+            hash1, hash2,
+            "different salts should produce different hashes"
+        );
         assert!(verify_password(password, &hash1));
         assert!(verify_password(password, &hash2));
     }

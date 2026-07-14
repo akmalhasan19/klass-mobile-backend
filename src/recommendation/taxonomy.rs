@@ -31,10 +31,10 @@ impl TaxonomyCatalog {
         if !path.exists() {
             return Err(TaxonomyError::NotFound(path));
         }
-        let bytes = std::fs::read(&path)
-            .map_err(|e| TaxonomyError::Read(path.clone(), e.to_string()))?;
-        let raw: Value = serde_json::from_slice(&bytes)
-            .map_err(|e| TaxonomyError::Parse(path.clone(), e))?;
+        let bytes =
+            std::fs::read(&path).map_err(|e| TaxonomyError::Read(path.clone(), e.to_string()))?;
+        let raw: Value =
+            serde_json::from_slice(&bytes).map_err(|e| TaxonomyError::Parse(path.clone(), e))?;
         Ok(Self {
             raw,
             source_path: path,

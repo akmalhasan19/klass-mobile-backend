@@ -57,11 +57,7 @@ pub async fn upload_avatar(
         .await
         .map_err(|e| anyhow::anyhow!("failed to upload to R2: {e}"))?;
 
-    let public_url = format!(
-        "{}/{}",
-        public_url_base.trim_end_matches('/'),
-        object_key
-    );
+    let public_url = format!("{}/{}", public_url_base.trim_end_matches('/'), object_key);
 
     Ok(UploadResult {
         path: object_key,

@@ -27,10 +27,17 @@ pub struct InsertToken<'a> {
 #[async_trait]
 pub trait PersonalAccessTokensRepo: Send + Sync {
     async fn find_by_id(&self, id: i64) -> anyhow::Result<Option<PersonalAccessToken>>;
-    async fn find_by_token_hash(&self, token_hash: &str) -> anyhow::Result<Option<PersonalAccessToken>>;
+    async fn find_by_token_hash(
+        &self,
+        token_hash: &str,
+    ) -> anyhow::Result<Option<PersonalAccessToken>>;
     async fn insert(&self, data: InsertToken<'_>) -> anyhow::Result<PersonalAccessToken>;
     async fn delete_by_id(&self, id: i64) -> anyhow::Result<()>;
-    async fn delete_by_tokenable(&self, tokenable_type: &str, tokenable_id: i64) -> anyhow::Result<()>;
+    async fn delete_by_tokenable(
+        &self,
+        tokenable_type: &str,
+        tokenable_id: i64,
+    ) -> anyhow::Result<()>;
     async fn update_last_used_at(&self, id: i64) -> anyhow::Result<()>;
 }
 
@@ -61,7 +68,10 @@ impl PersonalAccessTokensRepo for PgPersonalAccessTokensRepo {
         Ok(row)
     }
 
-    async fn find_by_token_hash(&self, token_hash: &str) -> anyhow::Result<Option<PersonalAccessToken>> {
+    async fn find_by_token_hash(
+        &self,
+        token_hash: &str,
+    ) -> anyhow::Result<Option<PersonalAccessToken>> {
         let row = sqlx::query_as::<_, PersonalAccessToken>(&format!(
             "SELECT {SELECT_COLUMNS} FROM personal_access_tokens WHERE token = $1"
         ))
@@ -102,13 +112,19 @@ impl PersonalAccessTokensRepo for PgPersonalAccessTokensRepo {
         Ok(())
     }
 
-    async fn delete_by_tokenable(&self, tokenable_type: &str, tokenable_id: i64) -> anyhow::Result<()> {
-        sqlx::query("DELETE FROM personal_access_tokens WHERE tokenable_type = $1 AND tokenable_id = $2")
-            .bind(tokenable_type)
-            .bind(tokenable_id)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| anyhow::anyhow!("failed to delete tokens for tokenable: {e}"))?;
+    async fn delete_by_tokenable(
+        &self,
+        tokenable_type: &str,
+        tokenable_id: i64,
+    ) -> anyhow::Result<()> {
+        sqlx::query(
+            "DELETE FROM personal_access_tokens WHERE tokenable_type = $1 AND tokenable_id = $2",
+        )
+        .bind(tokenable_type)
+        .bind(tokenable_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to delete tokens for tokenable: {e}"))?;
 
         Ok(())
     }

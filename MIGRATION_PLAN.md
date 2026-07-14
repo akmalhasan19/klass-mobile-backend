@@ -123,48 +123,48 @@
 
 **Goal:** All GET endpoints powering Flutter home/learning feeds.
 
-- [ ] **2.1 Pagination helper**
-  - [ ] `Pagination { page, per_page, total }` struct
-  - [ ] Default `per_page=15`, max 50
-  - [ ] Meta envelope `{pagination:{total, per_page, current_page, last_page}}`
-- [ ] **2.2 `src/db/repositories/topics.rs`**
-  - [ ] `Topic` struct `#[derive(FromRow)]` (UUID id, FKs `sub_subject_id`, `owner_user_id`)
-  - [ ] `find_many(filters, pagination)`, `find_by_id(id)` (eager `contents.tasks`)
-  - [ ] Filters: `ilike` search on title, `subject_id`, `sub_subject_id`, `is_published`
-- [ ] **2.3 `src/db/repositories/contents.rs`**
-  - [ ] `Content` struct with `data: serde_json::Value` (`serde_json` preserve_order enabled ✓)
-  - [ ] `find_many(filters, pagination)`, `find_by_id(id)` (eager `topic`, `tasks`)
-  - [ ] Filters: `ilike` search, `topic_id`, `type`
-- [ ] **2.4 `src/db/repositories/marketplace_tasks.rs`**
-  - [ ] `MarketplaceTask` struct
-  - [ ] `find_many(filters, pagination)`, `find_by_id(id)`
-  - [ ] Filters: search via `content.title` join, `status`, `content_id`
-- [ ] **2.5 `src/db/repositories/student_progress.rs`**
-  - [ ] `StudentProgress` struct (`completion_date: chrono::DateTime<Utc>`)
-  - [ ] `find_many(filters, pagination)`, `find_by_id(id)`
-  - [ ] Filters: `ilike` on `student_name`, sorted by `completion_date DESC`
-- [ ] **2.6 `src/db/repositories/gallery.rs`**
-  - [ ] Reuse `contents` query — `find_many` where `media_url IS NOT NULL`
-  - [ ] Filters: `ilike` search, `type`, `topic_id`
-- [ ] **2.7 `src/db/repositories/homepage_sections.rs`**
-  - [ ] `HomepageSection` struct
-  - [ ] `find_enabled_ordered()` — WHERE `is_enabled=true` ORDER BY `position`
-- [ ] **2.8 `src/api/rest/topics.rs`**
-  - [ ] `GET /topics`, `GET /topics/{id}`
-- [ ] **2.9 `src/api/rest/contents.rs`**
-  - [ ] `GET /contents`, `GET /contents/{id}`
-- [ ] **2.10 `src/api/rest/marketplace_tasks.rs`**
-  - [ ] `GET /marketplace-tasks`, `GET /marketplace-tasks/{id}`
-- [ ] **2.11 `src/api/rest/student_progress.rs`**
-  - [ ] `GET /student-progress`, `GET /student-progress/{id}`
-- [ ] **2.12 `src/api/rest/homepage_sections.rs`**
-  - [ ] `GET /homepage-sections`
-- [ ] **2.13 `src/api/rest/gallery.rs`**
-  - [ ] `GET /gallery`
-- [ ] **2.14 Stub `GET /homepage-recommendations`** (deferred to Phase 4)
-  - [ ] Return admin-curated `RecommendedProject` rows only (no personalization yet)
-- [ ] **2.15 `src/api/rest/mod.rs` router assembly**
-  - [ ] `Router::new().nest("/api/v1", ...)` with all handlers wired
+- [x] **2.1 Pagination helper**
+  - [x] `Pagination { page, per_page, total }` struct
+  - [x] Default `per_page=15`, max 50
+  - [x] Meta envelope `{pagination:{total, per_page, current_page, last_page}}`
+- [x] **2.2 `src/db/repositories/topics.rs`**
+  - [x] `Topic` struct `#[derive(FromRow)]` (UUID id, FKs `sub_subject_id`, `owner_user_id`)
+  - [x] `find_many(filters, pagination)`, `find_by_id(id)` (eager `contents.tasks`)
+  - [x] Filters: `ilike` search on title, `subject_id`, `sub_subject_id`, `is_published`
+- [x] **2.3 `src/db/repositories/contents.rs`**
+  - [x] `Content` struct with `data: serde_json::Value` (`serde_json` preserve_order enabled ✓)
+  - [x] `find_many(filters, pagination)`, `find_by_id(id)` (eager `topic`, `tasks`)
+  - [x] Filters: `ilike` search, `topic_id`, `type`
+- [x] **2.4 `src/db/repositories/marketplace_tasks.rs`**
+  - [x] `MarketplaceTask` struct
+  - [x] `find_many(filters, pagination)`, `find_by_id(id)`
+  - [x] Filters: search via `content.title` join, `status`, `content_id`
+- [x] **2.5 `src/db/repositories/student_progress.rs`**
+  - [x] `StudentProgress` struct (`completion_date: chrono::DateTime<Utc>`)
+  - [x] `find_many(filters, pagination)`, `find_by_id(id)`
+  - [x] Filters: `ilike` on `student_name`, sorted by `completion_date DESC`
+- [x] **2.6 `src/db/repositories/gallery.rs`**
+  - [x] Reuse `contents` query — `find_many` where `media_url IS NOT NULL`
+  - [x] Filters: `ilike` search, `type`, `topic_id`
+- [x] **2.7 `src/db/repositories/homepage_sections.rs`**
+  - [x] `HomepageSection` struct
+  - [x] `find_enabled_ordered()` — WHERE `is_enabled=true` ORDER BY `position`
+- [x] **2.8 `src/api/rest/topics.rs`**
+  - [x] `GET /topics`, `GET /topics/{id}`
+- [x] **2.9 `src/api/rest/contents.rs`**
+  - [x] `GET /contents`, `GET /contents/{id}`
+- [x] **2.10 `src/api/rest/marketplace_tasks.rs`**
+  - [x] `GET /marketplace-tasks`, `GET /marketplace-tasks/{id}`
+- [x] **2.11 `src/api/rest/student_progress.rs`**
+  - [x] `GET /student-progress`, `GET /student-progress/{id}`
+- [x] **2.12 `src/api/rest/homepage_sections.rs`**
+  - [x] `GET /homepage-sections`
+- [x] **2.13 `src/api/rest/gallery.rs`**
+  - [x] `GET /gallery`
+- [x] **2.14 Stub `GET /homepage-recommendations`** (deferred to Phase 4)
+  - [x] Return admin-curated `RecommendedProject` rows only (no personalization yet)
+- [x] **2.15 `src/api/rest/mod.rs` router assembly**
+  - [x] `Router::new().nest("/api/v1", ...)` with all handlers wired
 - [ ] **2.16 Tests `tests/api_public_read.rs`**
   - [ ] Seed fixtures via `sqlx::query!` within transaction
   - [ ] Assert JSON shape + pagination meta

@@ -47,6 +47,7 @@ pub async fn setup() -> Option<TestContext> {
     Some(TestContext { app, pool })
 }
 
+#[allow(dead_code)]
 pub async fn cleanup_user(pool: &PgPool, email: &str) {
     let _ = sqlx::query("DELETE FROM users WHERE email = $1")
         .bind(email)
@@ -54,6 +55,7 @@ pub async fn cleanup_user(pool: &PgPool, email: &str) {
         .await;
 }
 
+#[allow(dead_code)]
 pub async fn cleanup_tokens(pool: &PgPool, user_id: i64) {
     let _ = sqlx::query("DELETE FROM personal_access_tokens WHERE tokenable_id = $1")
         .bind(user_id)
