@@ -1,10 +1,12 @@
 pub mod api;
 pub mod auth;
 pub mod cache;
+pub mod contracts;
 pub mod config;
 pub mod db;
 pub mod error;
 pub mod governance;
+pub mod llm;
 pub mod media_gen;
 pub mod orchestrator;
 pub mod providers;

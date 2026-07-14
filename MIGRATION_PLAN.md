@@ -283,87 +283,87 @@
 
 **Goal:** Inline LLM adapter — Rust calls OpenRouter directly; cache, rate-limit, audit ledger operational.
 
-- [ ] **5.1 `src/providers/mod.rs`**
-  - [ ] Declare `Provider` trait with `async complete(req: CompletionRequest) -> Result<CompletionResponse>`
-  - [ ] Declare `OpenRouterProviderClient`, `ProviderRouter`
-- [ ] **5.2 `src/providers/openrouter.rs`**
-  - [ ] POST `{openrouter_base_url}/chat/completions`
-  - [ ] Headers: `Authorization: Bearer {openrouter_api_key}`, `HTTP-Referer: klass-mobile`, `X-Title: klass-gateway`
-  - [ ] Body: `model={openrouter_model}`, `messages`, `response_format: {type: json_object}` for interpret/draft/respond
-  - [ ] Parse `choices[0].message.content` (fallback: `output_text`, `choices[0].message.content`, `content` array)
-  - [ ] Timeout from config, retry 2× backoff 500 ms
-- [ ] **5.3 `src/providers/router.rs`**
-  - [ ] Primary + fallback provider selection
-  - [ ] Circuit breaker via `tower::limit` + `tower::retry`
-  - [ ] HTTP/2 connection pooling via reqwest
-- [ ] **5.4 `src/contracts/` scaffolding**
-  - [ ] `mod.rs` declares all contract modules
-  - [ ] `prompt_interpretation.rs` (port `MediaPromptInterpretationSchema`)
-  - [ ] `content_draft.rs` (port `MediaContentDraftSchema`)
-  - [ ] `delivery.rs` (port `MediaDeliveryResponseSchema`)
-  - [ ] `artifact_metadata.rs` (port `MediaArtifactMetadataContract`)
-  - [ ] `generation_spec.rs` (port `MediaGenerationSpecContract`)
-  - [ ] `taxonomy_inference.rs` (port `MediaPromptTaxonomyInferenceService` output schema)
-  - [ ] Each: `SchemaVersion`, `decode_and_validate`, `fallback` constructors
-  - [ ] Use `serde` + `garde` for validation rules (EXACT field RNG from Laravel)
-- [ ] **5.5 `src/cache/mod.rs`** (`LlmCacheRepo` over `llm_cache_entries`)
-  - [ ] `cache_key = sha256(canonical_json(request_payload))` (byte-compatible with Python key)
-  - [ ] `pg_try_advisory_lock(cache_key::bigint)` anti-stampede
-  - [ ] `lookup(key, route) -> Option<response>`; on hit: `hit_count++`, `last_hit_at=now`
-  - [ ] `store(key, route, request, response, ttl)`
-  - [ ] TTL + route-aware (`interpret` / `respond`)
-  - [ ] Lazy cleanup of expired entries (background or on lookup)
-- [ ] **5.6 `src/governance/rate_limit.rs`**
-  - [ ] `RateLimitPoliciesRepo` over `llm_rate_limit_policies`
-  - [ ] `RateLimitBucketsRepo` over `llm_rate_limit_buckets`
-  - [ ] Fixed-window increment: `INSERT ... ON CONFLICT DO UPDATE SET request_count = ...`
-  - [ ] Per-route budget check preflight
-  - [ ] Deny/degrade exhaustion actions
-- [ ] **5.7 `src/governance/ledger.rs`**
-  - [ ] `LedgerRepo` over `llm_request_ledger`
-  - [ ] Record each request: `request_id`, `generation_id`, `route`, provider, `latency_ms`, tokens, `cache_status`, `fallback_used`, `final_status`
-- [ ] **5.8 `src/governance/price_catalog.rs`**
-  - [ ] `PriceCatalogRepo` over `llm_price_catalog`
-  - [ ] Migration `000105_seed_deepseek_price.sql` — hardcoded Deepseek V4 Flash pricing (input/output per 1M tokens)
-  - [ ] Cost estimate helper
-- [ ] **5.9 `src/llm/mod.rs`**
-  - [ ] Declare `interpret`, `draft`, `respond` submodules
-- [ ] **5.10 `src/llm/interpret.rs`** (port `MediaPromptInterpretationService`)
-  - [ ] `InterpretService::interpret(generation)`
-  - [ ] Build interpretation request payload (`MediaPromptInterpretationRequestContract::from_generation`)
-  - [ ] Resolve taxonomy inference fallback when subject/SubSubject missing
-  - [ ] Cache lookup; on miss call OpenRouter
-  - [ ] Validate via `MediaPromptInterpretationSchema::decode_and_validate`
-  - [ ] Enrich with subject/sub_subject context from taxonomy inference
-  - [ ] Build `interpretation_audit_payload` (provider metadata, request payload, request meta, response, taxonomy inference, normalized payload, used_fallback, fallback_error)
-  - [ ] Persist `llm_provider`, `llm_model`, `interpretation_payload`, `interpretation_audit_payload`
-  - [ ] On contract failure → `MediaPromptInterpretationSchema::fallback(...)`
-  - [ ] Write to ledger + rate-limit bucket
-- [ ] **5.11 `src/llm/draft.rs`** (port `MediaContentDraftingService`)
-  - [ ] `DraftService::draft(generation, decision)`
-  - [ ] Validate interpretation payload
-  - [ ] Cache lookup; call OpenRouter if miss (or deterministic fallback if adapter unconfigured)
-  - [ ] POST `MediaContentDraftRequestContract` (deliverable includes `resolved_output_type`, `interpretation`, `taxonomy_hint`)
-  - [ ] Validate via `MediaContentDraftSchema::decode_and_validate`
-  - [ ] On failure → `MediaContentDraftSchema::fallback_from_interpretation` with `content_integrity` score 1.0
-  - [ ] Return `{payload, source, adapter_metadata, fallback_error}`
-- [ ] **5.12 `src/llm/respond.rs`** (port `MediaDeliveryResponseService`)
-  - [ ] `RespondService::compose(generation)`
-  - [ ] Build context: title, preview_summary, teacher_message, recommended_next_steps, classroom_tips, artifact metadata, publication entities
-  - [ ] If file_url exists → POST `MediaDeliveryRequestContract` (HMAC-signed to LLM_ADAPTER_FALLBACK_URL if set, else OpenRouter)
-  - [ ] Validate via `MediaDeliveryResponseSchema::validate`
-  - [ ] On failure → `MediaDeliveryResponseSchema::fallback(...)`
-  - [ ] Persist `delivery_payload` (incl. `response_meta` {provider, model} + `fallback` block)
-- [ ] **5.13 `LLM_ADAPTER_FALLBACK_URL` rollback path**
-  - [ ] If env set (Python adapter URL), route interpret/draft/respond through it via HMAC
-  - [ ] If not set, use OpenRouter direct
-  - [ ] Toggle via config without code changes
-- [ ] **5.14 Tests**
-  - [ ] `tests/provider_openrouter.rs` — mockito mock `/chat/completions`
-  - [ ] `tests/contracts.rs` — snapshot tests decode+validate+fallback per schema (mirror Laravel `tests/Unit`)
-  - [ ] `tests/cache.rs` — concurrency test 50 tasks, exactly 1 provider call
-  - [ ] `tests/governance.rs` — fixed-window counter, deny action, ledger insertion, cost estimate
-  - [ ] `tests/llm_smoke.rs` — end-to-end interpret→draft→respond with mocked OpenRouter
+- [x] **5.1 `src/providers/mod.rs`**
+  - [x] Declare `Provider` trait with `async complete(req: CompletionRequest) -> Result<CompletionResponse>`
+  - [x] Declare `OpenRouterProviderClient`, `ProviderRouter`
+- [x] **5.2 `src/providers/openrouter.rs`**
+  - [x] POST `{openrouter_base_url}/chat/completions`
+  - [x] Headers: `Authorization: Bearer {openrouter_api_key}`, `HTTP-Referer: klass-mobile`, `X-Title: klass-gateway`
+  - [x] Body: `model={openrouter_model}`, `messages`, `response_format: {type: json_object}` for interpret/draft/respond
+  - [x] Parse `choices[0].message.content` (fallback: `output_text`, `choices[0].message.content`, `content` array)
+  - [x] Timeout from config, retry 2× backoff 500 ms
+- [x] **5.3 `src/providers/router.rs`**
+  - [x] Primary + fallback provider selection
+  - [x] Circuit breaker via `tower::limit` + `tower::retry`
+  - [x] HTTP/2 connection pooling via reqwest
+- [x] **5.4 `src/contracts/` scaffolding**
+  - [x] `mod.rs` declares all contract modules
+  - [x] `prompt_interpretation.rs` (port `MediaPromptInterpretationSchema`)
+  - [x] `content_draft.rs` (port `MediaContentDraftSchema`)
+  - [x] `delivery.rs` (port `MediaDeliveryResponseSchema`)
+  - [x] `artifact_metadata.rs` (port `MediaArtifactMetadataContract`)
+  - [x] `generation_spec.rs` (port `MediaGenerationSpecContract`)
+  - [x] `taxonomy_inference.rs` (port `MediaPromptTaxonomyInferenceService` output schema)
+  - [x] Each: `SchemaVersion`, `decode_and_validate`, `fallback` constructors
+  - [x] Use `serde` + `garde` for validation rules (EXACT field RNG from Laravel)
+- [x] **5.5 `src/cache/mod.rs`** (`LlmCacheRepo` over `llm_cache_entries`)
+  - [x] `cache_key = sha256(canonical_json(request_payload))` (byte-compatible with Python key)
+  - [x] `pg_try_advisory_lock(cache_key::bigint)` anti-stampede
+  - [x] `lookup(key, route) -> Option<response>`; on hit: `hit_count++`, `last_hit_at=now`
+  - [x] `store(key, route, request, response, ttl)`
+  - [x] TTL + route-aware (`interpret` / `respond`)
+  - [x] Lazy cleanup of expired entries (background or on lookup)
+- [x] **5.6 `src/governance/rate_limit.rs`**
+  - [x] `RateLimitPoliciesRepo` over `llm_rate_limit_policies`
+  - [x] `RateLimitBucketsRepo` over `llm_rate_limit_buckets`
+  - [x] Fixed-window increment: `INSERT ... ON CONFLICT DO UPDATE SET request_count = ...`
+  - [x] Per-route budget check preflight
+  - [x] Deny/degrade exhaustion actions
+- [x] **5.7 `src/governance/ledger.rs`**
+  - [x] `LedgerRepo` over `llm_request_ledger`
+  - [x] Record each request: `request_id`, `generation_id`, `route`, provider, `latency_ms`, tokens, `cache_status`, `fallback_used`, `final_status`
+- [x] **5.8 `src/governance/price_catalog.rs`**
+  - [x] `PriceCatalogRepo` over `llm_price_catalog`
+  - [x] Migration `000105_seed_deepseek_price.sql` — hardcoded Deepseek V4 Flash pricing (input/output per 1M tokens)
+  - [x] Cost estimate helper
+- [x] **5.9 `src/llm/mod.rs`**
+  - [x] Declare `interpret`, `draft`, `respond` submodules
+- [x] **5.10 `src/llm/interpret.rs`** (port `MediaPromptInterpretationService`)
+  - [x] `InterpretService::interpret(generation)`
+  - [x] Build interpretation request payload (`MediaPromptInterpretationRequestContract::from_generation`)
+  - [x] Resolve taxonomy inference fallback when subject/SubSubject missing
+  - [x] Cache lookup; on miss call OpenRouter
+  - [x] Validate via `MediaPromptInterpretationSchema::decode_and_validate`
+  - [x] Enrich with subject/sub_subject context from taxonomy inference
+  - [x] Build `interpretation_audit_payload` (provider metadata, request payload, request meta, response, taxonomy inference, normalized payload, used_fallback, fallback_error)
+  - [x] Persist `llm_provider`, `llm_model`, `interpretation_payload`, `interpretation_audit_payload`
+  - [x] On contract failure → `MediaPromptInterpretationSchema::fallback(...)`
+  - [x] Write to ledger + rate-limit bucket
+- [x] **5.11 `src/llm/draft.rs`** (port `MediaContentDraftingService`)
+  - [x] `DraftService::draft(generation, decision)`
+  - [x] Validate interpretation payload
+  - [x] Cache lookup; call OpenRouter if miss (or deterministic fallback if adapter unconfigured)
+  - [x] POST `MediaContentDraftRequestContract` (deliverable includes `resolved_output_type`, `interpretation`, `taxonomy_hint`)
+  - [x] Validate via `MediaContentDraftSchema::decode_and_validate`
+  - [x] On failure → `MediaContentDraftSchema::fallback_from_interpretation` with `content_integrity` score 1.0
+  - [x] Return `{payload, source, adapter_metadata, fallback_error}`
+- [x] **5.12 `src/llm/respond.rs`** (port `MediaDeliveryResponseService`)
+  - [x] `RespondService::compose(generation)`
+  - [x] Build context: title, preview_summary, teacher_message, recommended_next_steps, classroom_tips, artifact metadata, publication entities
+  - [x] If file_url exists → POST `MediaDeliveryRequestContract` (HMAC-signed to LLM_ADAPTER_FALLBACK_URL if set, else OpenRouter)
+  - [x] Validate via `MediaDeliveryResponseSchema::validate`
+  - [x] On failure → `MediaDeliveryResponseSchema::fallback(...)`
+  - [x] Persist `delivery_payload` (incl. `response_meta` {provider, model} + `fallback` block)
+- [x] **5.13 `LLM_ADAPTER_FALLBACK_URL` rollback path**
+  - [x] If env set (Python adapter URL), route interpret/draft/respond through it via HMAC
+  - [x] If not set, use OpenRouter direct
+  - [x] Toggle via config without code changes
+- [x] **5.14 Tests**
+  - [x] `tests/provider_openrouter.rs` — mockito mock `/chat/completions`
+  - [x] `tests/contracts.rs` — snapshot tests decode+validate+fallback per schema (mirror Laravel `tests/Unit`)
+  - [x] `tests/cache.rs` — concurrency test 50 tasks, exactly 1 provider call
+  - [x] `tests/governance.rs` — fixed-window counter, deny action, ledger insertion, cost estimate
+  - [x] `tests/llm_smoke.rs` — end-to-end interpret→draft→respond with mocked OpenRouter
 
 ---
 
