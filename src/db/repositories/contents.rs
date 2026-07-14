@@ -63,6 +63,30 @@ pub struct ContentFilters {
     pub content_type: Option<String>,
 }
 
+/// Payload for creating a new content.
+#[derive(Debug, Clone)]
+pub struct CreateContentPayload {
+    pub topic_id: Uuid,
+    pub content_type: String,
+    pub title: Option<String>,
+    pub data: Option<serde_json::Value>,
+    pub media_url: Option<String>,
+}
+
+/// Payload for partial update of a content.
+/// Each nullable field is `Option<Option<T>>` to distinguish between:
+/// - `None` — field not provided, leave unchanged
+/// - `Some(None)` — explicitly set to NULL
+/// - `Some(Some(v))` — set to value `v`
+#[derive(Debug, Clone, Default)]
+pub struct UpdateContentPayload {
+    pub topic_id: Option<Uuid>,
+    pub content_type: Option<String>,
+    pub title: Option<Option<String>>,
+    pub data: Option<Option<serde_json::Value>>,
+    pub media_url: Option<Option<String>>,
+}
+
 #[async_trait]
 pub trait ContentsRepo: Send + Sync {
     async fn find_many(
@@ -71,6 +95,22 @@ pub trait ContentsRepo: Send + Sync {
         pagination: &PaginationQuery,
     ) -> anyhow::Result<(Vec<Content>, i64)>;
     async fn find_by_id(&self, id: Uuid) -> anyhow::Result<Option<ContentWithRelations>>;
+
+    /// Insert a new content row. Returns the created Content.
+    async fn insert(&self, payload: &CreateContentPayload) -> anyhow::Result<Content>;
+
+    /// Update a content with partial fields. Returns the updated Content.
+    async fn update(&self, id: Uuid, payload: &UpdateContentPayload) -> anyhow::Result<Content>;
+
+    /// Delete a content by ID. Returns `true` if a row was deleted.
+    async fn delete(&self, id: Uuid) -> anyhow::Result<bool>;
+
+    /// Set the `is_published` flag explicitly. Returns the updated value.
+    async fn set_publish(&self, id: Uuid, is_published: bool) -> anyhow::Result<bool>;
+
+    /// Reorder a content up or down by swapping its `order` with the adjacent content
+    /// within the same topic_id group. `direction` must be `"up"` or `"down"`.
+    async fn reorder(&self, id: Uuid, direction: &str) -> anyhow::Result<()>;
 }
 
 pub struct PgContentsRepo {
@@ -189,6 +229,187 @@ impl ContentsRepo for PgContentsRepo {
             topic,
             tasks,
         }))
+    }
+
+    async fn insert(&self, payload: &CreateContentPayload) -> anyhow::Result<Content> {
+        let id = Uuid::new_v4();
+        let content = sqlx::query_as::<_, Content>(
+            r#"
+            INSERT INTO contents (id, topic_id, type, title, data, media_url,
+                                  is_published, "order", created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, TRUE, 0, NOW(), NOW())
+            RETURNING id, topic_id, type, title, data, media_url,
+                      is_published, "order", created_at, updated_at
+            "#,
+        )
+        .bind(id)
+        .bind(payload.topic_id)
+        .bind(&payload.content_type)
+        .bind(&payload.title)
+        .bind(&payload.data)
+        .bind(&payload.media_url)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to insert content: {e}"))?;
+
+        Ok(content)
+    }
+
+    async fn update(&self, id: Uuid, payload: &UpdateContentPayload) -> anyhow::Result<Content> {
+        let current = sqlx::query_as::<_, Content>(
+            r#"SELECT id, topic_id, type, title, data, media_url,
+                     is_published, "order", created_at, updated_at
+              FROM contents WHERE id = $1"#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("content not found"))?;
+
+        let new_topic_id = payload.topic_id.unwrap_or(current.topic_id);
+        let new_content_type = payload
+            .content_type
+            .clone()
+            .unwrap_or_else(|| current.content_type.clone());
+        let new_title = payload.title.clone().unwrap_or(current.title);
+        let new_data = payload.data.clone().unwrap_or(current.data);
+        let new_media_url = payload.media_url.clone().unwrap_or(current.media_url);
+
+        let updated = sqlx::query_as::<_, Content>(
+            r#"
+            UPDATE contents
+            SET topic_id = $2,
+                type = $3,
+                title = $4,
+                data = $5,
+                media_url = $6,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING id, topic_id, type, title, data, media_url,
+                      is_published, "order", created_at, updated_at
+            "#,
+        )
+        .bind(id)
+        .bind(new_topic_id)
+        .bind(&new_content_type)
+        .bind(&new_title)
+        .bind(&new_data)
+        .bind(&new_media_url)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to update content: {e}"))?;
+
+        Ok(updated)
+    }
+
+    async fn delete(&self, id: Uuid) -> anyhow::Result<bool> {
+        let result = sqlx::query(r#"DELETE FROM contents WHERE id = $1"#)
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to delete content: {e}"))?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn set_publish(&self, id: Uuid, is_published: bool) -> anyhow::Result<bool> {
+        let row: Option<(bool,)> = sqlx::query_as(
+            r#"
+            UPDATE contents
+            SET is_published = $2,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING is_published
+            "#,
+        )
+        .bind(id)
+        .bind(is_published)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to set content publish: {e}"))?;
+
+        row.map(|r| r.0)
+            .ok_or_else(|| anyhow::anyhow!("content not found"))
+    }
+
+    async fn reorder(&self, id: Uuid, direction: &str) -> anyhow::Result<()> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to begin transaction: {e}"))?;
+
+        // Lock the current content row and get its topic_id + order
+        let current: (Uuid, i32) = sqlx::query_as(
+            r#"SELECT topic_id, "order" FROM contents WHERE id = $1 FOR UPDATE"#,
+        )
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("content not found"))?;
+
+        let (topic_id, current_order) = current;
+
+        let neighbor = match direction {
+            "up" => {
+                // Find the content with the highest order that is still < current_order
+                // within the same topic_id group
+                sqlx::query_as::<_, (Uuid, i32)>(
+                    r#"SELECT id, "order" FROM contents
+                       WHERE topic_id = $1 AND "order" < $2
+                       ORDER BY "order" DESC
+                       LIMIT 1
+                       FOR UPDATE"#,
+                )
+                .bind(topic_id)
+                .bind(current_order)
+                .fetch_optional(&mut *tx)
+                .await?
+            }
+            "down" => {
+                // Find the content with the lowest order that is still > current_order
+                // within the same topic_id group
+                sqlx::query_as::<_, (Uuid, i32)>(
+                    r#"SELECT id, "order" FROM contents
+                       WHERE topic_id = $1 AND "order" > $2
+                       ORDER BY "order" ASC
+                       LIMIT 1
+                       FOR UPDATE"#,
+                )
+                .bind(topic_id)
+                .bind(current_order)
+                .fetch_optional(&mut *tx)
+                .await?
+            }
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "invalid direction '{}': must be 'up' or 'down'",
+                    direction
+                ));
+            }
+        };
+
+        let (neighbor_id, neighbor_order) = neighbor
+            .ok_or_else(|| anyhow::anyhow!("cannot move {} further — already at the edge", direction))?;
+
+        // Swap the two order values
+        sqlx::query(r#"UPDATE contents SET "order" = $2, updated_at = NOW() WHERE id = $1"#)
+            .bind(id)
+            .bind(neighbor_order)
+            .execute(&mut *tx)
+            .await?;
+
+        sqlx::query(r#"UPDATE contents SET "order" = $2, updated_at = NOW() WHERE id = $1"#)
+            .bind(neighbor_id)
+            .bind(current_order)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit()
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to commit reorder transaction: {e}"))?;
+
+        Ok(())
     }
 }
 

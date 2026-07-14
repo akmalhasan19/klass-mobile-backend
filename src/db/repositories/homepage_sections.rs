@@ -14,10 +14,21 @@ pub struct HomepageSection {
     pub updated_at: chrono::NaiveDateTime,
 }
 
+/// Payload for a single section update in a bulk operation.
+#[derive(Debug, Clone)]
+pub struct HomepageSectionUpdate {
+    pub id: Uuid,
+    pub position: i32,
+    pub is_enabled: bool,
+}
+
 #[async_trait]
 pub trait HomepageSectionsRepo: Send + Sync {
     async fn find_enabled_ordered(&self) -> anyhow::Result<Vec<HomepageSection>>;
     async fn find_by_key(&self, key: &str) -> anyhow::Result<Option<HomepageSection>>;
+
+    /// Bulk update multiple sections' position and is_enabled in a single DB transaction.
+    async fn bulk_update(&self, updates: &[HomepageSectionUpdate]) -> anyhow::Result<u64>;
 }
 
 pub struct PgHomepageSectionsRepo {
@@ -62,6 +73,45 @@ impl HomepageSectionsRepo for PgHomepageSectionsRepo {
             .map_err(|e| anyhow::anyhow!("failed to fetch homepage section by key: {e}"))?;
 
         Ok(section)
+    }
+
+    async fn bulk_update(&self, updates: &[HomepageSectionUpdate]) -> anyhow::Result<u64> {
+        if updates.is_empty() {
+            return Ok(0);
+        }
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to begin transaction: {e}"))?;
+
+        let mut affected = 0u64;
+        for update in updates {
+            let result = sqlx::query(
+                r#"
+                UPDATE homepage_sections
+                SET position = $2,
+                    is_enabled = $3,
+                    updated_at = NOW()
+                WHERE id = $1
+                "#,
+            )
+            .bind(update.id)
+            .bind(update.position)
+            .bind(update.is_enabled)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to update homepage section '{}': {e}", update.id))?;
+
+            affected += result.rows_affected();
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to commit bulk update transaction: {e}"))?;
+
+        Ok(affected)
     }
 }
 
@@ -140,5 +190,53 @@ mod tests {
 
         assert_eq!(sorted[0].key, "section_b");
         assert_eq!(sorted[1].key, "section_a");
+    }
+
+    #[test]
+    fn test_bulk_update_payload() {
+        let updates = vec![
+            HomepageSectionUpdate {
+                id: Uuid::new_v4(),
+                position: 1,
+                is_enabled: true,
+            },
+            HomepageSectionUpdate {
+                id: Uuid::new_v4(),
+                position: 2,
+                is_enabled: false,
+            },
+        ];
+
+        assert_eq!(updates.len(), 2);
+        assert!(updates[0].is_enabled);
+        assert!(!updates[1].is_enabled);
+        assert_eq!(updates[0].position, 1);
+        assert_eq!(updates[1].position, 2);
+    }
+
+    #[test]
+    fn test_bulk_update_empty() {
+        let updates: Vec<HomepageSectionUpdate> = vec![];
+        assert!(updates.is_empty());
+    }
+
+    #[test]
+    fn test_bulk_update_payload_order() {
+        let mut updates = vec![
+            HomepageSectionUpdate {
+                id: Uuid::new_v4(),
+                position: 3,
+                is_enabled: false,
+            },
+            HomepageSectionUpdate {
+                id: Uuid::new_v4(),
+                position: 1,
+                is_enabled: true,
+            },
+        ];
+
+        updates.sort_by_key(|u| u.position);
+        assert_eq!(updates[0].position, 1);
+        assert_eq!(updates[1].position, 3);
     }
 }

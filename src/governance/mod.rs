@@ -1,3 +1,5 @@
+pub mod activity_log;
+
 // Rate limiting and budget governance
 // - RateLimitPolicy management (upsert, sync defaults)
 // - Fixed-window RateLimitBucket tracking

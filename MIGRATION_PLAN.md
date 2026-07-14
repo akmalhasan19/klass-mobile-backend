@@ -165,10 +165,10 @@
   - [x] Return admin-curated `RecommendedProject` rows only (no personalization yet)
 - [x] **2.15 `src/api/rest/mod.rs` router assembly**
   - [x] `Router::new().nest("/api/v1", ...)` with all handlers wired
-- [ ] **2.16 Tests `tests/api_public_read.rs`**
-  - [ ] Seed fixtures via `sqlx::query!` within transaction
-  - [ ] Assert JSON shape + pagination meta
-  - [ ] Filter combinations
+- [x] **2.16 Tests `tests/api_public_read.rs`**
+  - [x] Seed fixtures via `sqlx::query!` within transaction
+  - [x] Assert JSON shape + pagination meta
+  - [x] Filter combinations
 
 ---
 
@@ -176,54 +176,54 @@
 
 **Goal:** Admin CRUD (replaces Blade), all mutations write `activity_logs`.
 
-- [ ] **3.1 `src/governance/activity_log.rs`**
-  - [ ] `record_activity(pool, actor_id, action, subject_type, subject_id, metadata) -> ActivityLog`
-  - [ ] Helper used by all admin write handlers
-- [ ] **3.2 `src/db/repositories/activity_logs.rs`**
-  - [ ] `find_many(filters, pagination)` — filter by `action`, `actor_id`, `subject_type`, `date_from`, `date_to`, `search` (actor name/email + subject_id + action)
-- [ ] **3.3 `src/db/repositories/media_files.rs`**
-  - [ ] `find_many(filters, pagination)`, `insert`, `delete_by_id`, `bulk_delete(ids)`
-- [ ] **3.4 `src/db/repositories/system_settings.rs`**
-  - [ ] `get(key, default)`, `set(key, value, type)`, `find_grouped()`, `bulk_update(map)`
-  - [ ] Boolean coercion for `type=boolean`
-- [ ] **3.5 `src/storage/r2.rs`** (deferred from Phase 0 stub)
-  - [ ] `upload(category: &str, bytes: Vec<u8>, content_type: &str) -> {path, public_url}`
-  - [ ] `delete(path: &str) -> bool`
-  - [ ] `exists(path: &str) -> bool`
-  - [ ] `generate_public_url(path)` via `R2_PUBLIC_URL` config
-  - [ ] Filename sanitize: slug + timestamp + 8-char random prefix
-  - [ ] Validate mime + max size per category (port `filesystems.upload_categories`)
-- [ ] **3.6 `src/api/rest/admin/topics.rs`**
-  - [ ] `PUT/PATCH /admin/topics/{id}`, `DELETE /admin/topics/{id}`
-  - [ ] `PATCH /admin/topics/{id}/reorder` (swap up/down via `BEGIN...SELECT FOR UPDATE...UPDATE "order"`)
-  - [ ] `PATCH /admin/topics/{id}/publish` (toggle `is_published`)
-  - [ ] Each mutation → `record_activity`
-- [ ] **3.7 `src/api/rest/admin/contents.rs`**
-  - [ ] `POST /admin/contents`, `PUT/PATCH /admin/contents/{id}`, `DELETE /admin/contents/{id}`
-  - [ ] Reorder + publish toggles
-- [ ] **3.8 `src/api/rest/admin/marketplace_tasks.rs`**
-  - [ ] `POST /admin/marketplace-tasks`, `PUT/PATCH /admin/marketplace-tasks/{id}`, `DELETE /admin/marketplace-tasks/{id}`
-  - [ ] `PATCH /admin/marketplace-tasks/{id}/status` (writes `update_task_status` activity)
-- [ ] **3.9 `src/api/rest/admin/student_progress.rs`**
-  - [ ] `POST /admin/student-progress`, `PUT/PATCH /admin/student-progress/{id}`, `DELETE /admin/student-progress/{id}`
-- [ ] **3.10 `src/api/rest/admin/uploads.rs`**
-  - [ ] `POST /admin/upload/{category}` (avatars|gallery|materials|attachments)
-  - [ ] `DELETE /admin/upload/{category}?path=...`
-- [ ] **3.11 `src/api/rest/admin/activity_logs.rs`**
-  - [ ] `GET /admin/activity-logs` (paginated, all filters)
-- [ ] **3.12 `src/api/rest/admin/homepage_sections.rs`**
-  - [ ] `PATCH /admin/homepage-sections` (bulk update position + is_enabled in DB transaction)
-  - [ ] Writes `update_homepage_sections` activity log
-- [ ] **3.13 `src/api/rest/admin/system_settings.rs`**
-  - [ ] `GET /admin/settings` (grouped by `group`)
-  - [ ] `PATCH /admin/settings` (settings map → type coercion per field)
-- [ ] **3.14 Router mounting with `require_role(admin)`**
-  - [ ] All `/api/v1/admin/*` routes guarded
-- [ ] **3.15 Tests `tests/api_admin_write.rs`**
-  - [ ] CRUD each entity
-  - [ ] Activity log recorded per mutation
-  - [ ] Upload via `mockito` mock S3 endpoint
-  - [ ] Reorder transaction safety
+- [x] **3.1 `src/governance/activity_log.rs`**
+  - [x] `record_activity(pool, actor_id, action, subject_type, subject_id, metadata) -> ActivityLog`
+  - [x] Helper used by all admin write handlers
+- [x] **3.2 `src/db/repositories/activity_logs.rs`**
+  - [x] `find_many(filters, pagination)` — filter by `action`, `actor_id`, `subject_type`, `date_from`, `date_to`, `search` (actor name/email + subject_id + action)
+- [x] **3.3 `src/db/repositories/media_files.rs`**
+  - [x] `find_many(filters, pagination)`, `insert`, `delete_by_id`, `bulk_delete(ids)`
+- [x] **3.4 `src/db/repositories/system_settings.rs`**
+  - [x] `get(key, default)`, `set(key, value, type)`, `find_grouped()`, `bulk_update(map)`
+  - [x] Boolean coercion for `type=boolean`
+- [x] **3.5 `src/storage/r2.rs`** (deferred from Phase 0 stub)
+  - [x] `upload(category: &str, bytes: Vec<u8>, content_type: &str) -> {path, public_url}`
+  - [x] `delete(path: &str) -> bool`
+  - [x] `exists(path: &str) -> bool`
+  - [x] `generate_public_url(path)` via `R2_PUBLIC_URL` config
+  - [x] Filename sanitize: slug + timestamp + 8-char random prefix
+  - [x] Validate mime + max size per category (port `filesystems.upload_categories`)
+- [x] **3.6 `src/api/rest/admin/topics.rs`**
+  - [x] `PUT/PATCH /admin/topics/{id}`, `DELETE /admin/topics/{id}`
+  - [x] `PATCH /admin/topics/{id}/reorder` (swap up/down via `BEGIN...SELECT FOR UPDATE...UPDATE "order"`)
+  - [x] `PATCH /admin/topics/{id}/publish` (toggle `is_published`)
+  - [x] Each mutation → `record_activity`
+- [x] **3.7 `src/api/rest/admin/contents.rs`**
+  - [x] `POST /admin/contents`, `PUT/PATCH /admin/contents/{id}`, `DELETE /admin/contents/{id}`
+  - [x] Reorder + publish toggles
+- [x] **3.8 `src/api/rest/admin/marketplace_tasks.rs`**
+  - [x] `POST /admin/marketplace-tasks`, `PUT/PATCH /admin/marketplace-tasks/{id}`, `DELETE /admin/marketplace-tasks/{id}`
+  - [x] `PATCH /admin/marketplace-tasks/{id}/status` (writes `update_task_status` activity)
+- [x] **3.9 `src/api/rest/admin/student_progress.rs`**
+  - [x] `POST /admin/student-progress`, `PUT/PATCH /admin/student-progress/{id}`, `DELETE /admin/student-progress/{id}`
+- [x] **3.10 `src/api/rest/admin/uploads.rs`**
+  - [x] `POST /admin/upload/{category}` (avatars|gallery|materials|attachments)
+  - [x] `DELETE /admin/upload/{category}?path=...`
+- [x] **3.11 `src/api/rest/admin/activity_logs.rs`**
+  - [x] `GET /admin/activity-logs` (paginated, all filters)
+- [x] **3.12 `src/api/rest/admin/homepage_sections.rs`**
+  - [x] `PATCH /admin/homepage-sections` (bulk update position + is_enabled in DB transaction)
+  - [x] Writes `update_homepage_sections` activity log
+- [x] **3.13 `src/api/rest/admin/system_settings.rs`**
+  - [x] `GET /admin/settings` (grouped by `group`)
+  - [x] `PATCH /admin/settings` (settings map → type coercion per field)
+- [x] **3.14 Router mounting with `require_role(admin)`**
+  - [x] All `/api/v1/admin/*` routes guarded
+- [x] **3.15 Tests `tests/api_admin_write.rs`**
+  - [x] CRUD each entity
+  - [x] Activity log recorded per mutation
+  - [x] Upload via `mockito` mock S3 endpoint
+  - [x] Reorder transaction safety
 
 ---
 

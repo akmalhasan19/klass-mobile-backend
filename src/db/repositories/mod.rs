@@ -1,9 +1,12 @@
+pub mod activity_logs;
 pub mod contents;
 pub mod gallery;
 pub mod homepage_sections;
 pub mod marketplace_tasks;
+pub mod media_files;
 pub mod personal_access_tokens;
 pub mod recommended_projects;
 pub mod student_progress;
+pub mod system_settings;
 pub mod topics;
 pub mod users;

@@ -47,6 +47,35 @@ pub struct MarketplaceTaskFilters {
     pub content_id: Option<Uuid>,
 }
 
+/// Payload for creating a new marketplace task.
+#[derive(Debug, Clone)]
+pub struct CreateMarketplaceTaskPayload {
+    pub content_id: Uuid,
+    pub status: String,
+    pub task_type: String,
+    pub description: Option<String>,
+    pub creator_id: Option<String>,
+    pub suggested_freelancer_id: Option<i64>,
+    pub attachment_url: Option<String>,
+    pub media_generation_id: Option<Uuid>,
+}
+
+/// Payload for partial update of a marketplace task.
+/// Nullable fields use `Option<Option<T>>` to distinguish between:
+/// - `None` — field not provided, leave unchanged
+/// - `Some(None)` — explicitly set to NULL
+/// - `Some(Some(v))` — set to value `v`
+#[derive(Debug, Clone, Default)]
+pub struct UpdateMarketplaceTaskPayload {
+    pub content_id: Option<Uuid>,
+    pub task_type: Option<String>,
+    pub description: Option<Option<String>>,
+    pub creator_id: Option<Option<String>>,
+    pub suggested_freelancer_id: Option<Option<i64>>,
+    pub attachment_url: Option<Option<String>>,
+    pub media_generation_id: Option<Option<Uuid>>,
+}
+
 #[async_trait]
 pub trait MarketplaceTasksRepo: Send + Sync {
     async fn find_many(
@@ -55,6 +84,18 @@ pub trait MarketplaceTasksRepo: Send + Sync {
         pagination: &PaginationQuery,
     ) -> anyhow::Result<(Vec<MarketplaceTaskWithContent>, i64)>;
     async fn find_by_id(&self, id: Uuid) -> anyhow::Result<Option<MarketplaceTaskWithContent>>;
+
+    /// Insert a new marketplace task. Returns the created MarketplaceTask.
+    async fn insert(&self, payload: &CreateMarketplaceTaskPayload) -> anyhow::Result<MarketplaceTask>;
+
+    /// Update a marketplace task with partial fields. Returns the updated MarketplaceTask.
+    async fn update(&self, id: Uuid, payload: &UpdateMarketplaceTaskPayload) -> anyhow::Result<MarketplaceTask>;
+
+    /// Delete a marketplace task by ID. Returns `true` if a row was deleted.
+    async fn delete(&self, id: Uuid) -> anyhow::Result<bool>;
+
+    /// Update only the status field. Returns the updated MarketplaceTask.
+    async fn update_status(&self, id: Uuid, status: &str) -> anyhow::Result<MarketplaceTask>;
 }
 
 pub struct PgMarketplaceTasksRepo {
@@ -195,6 +236,129 @@ impl MarketplaceTasksRepo for PgMarketplaceTasksRepo {
 
         Ok(Some(MarketplaceTaskWithContent { task, content }))
     }
+
+    async fn insert(&self, payload: &CreateMarketplaceTaskPayload) -> anyhow::Result<MarketplaceTask> {
+        let id = Uuid::new_v4();
+        let task = sqlx::query_as::<_, MarketplaceTask>(
+            r#"
+            INSERT INTO marketplace_tasks
+                (id, content_id, status, task_type, description, creator_id,
+                 suggested_freelancer_id, attachment_url, media_generation_id,
+                 created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+            RETURNING id, content_id, status, task_type, description, creator_id,
+                      suggested_freelancer_id, attachment_url, media_generation_id,
+                      created_at, updated_at
+            "#,
+        )
+        .bind(id)
+        .bind(payload.content_id)
+        .bind(&payload.status)
+        .bind(&payload.task_type)
+        .bind(&payload.description)
+        .bind(&payload.creator_id)
+        .bind(payload.suggested_freelancer_id)
+        .bind(&payload.attachment_url)
+        .bind(payload.media_generation_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to insert marketplace task: {e}"))?;
+
+        Ok(task)
+    }
+
+    async fn update(&self, id: Uuid, payload: &UpdateMarketplaceTaskPayload) -> anyhow::Result<MarketplaceTask> {
+        let current = sqlx::query_as::<_, MarketplaceTask>(
+            r#"SELECT id, content_id, status, task_type, description, creator_id,
+                     suggested_freelancer_id, attachment_url, media_generation_id,
+                     created_at, updated_at
+              FROM marketplace_tasks WHERE id = $1"#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("marketplace task not found"))?;
+
+        let new_content_id = payload.content_id.unwrap_or(current.content_id);
+        let new_task_type = payload
+            .task_type
+            .clone()
+            .unwrap_or_else(|| current.task_type.clone());
+        let new_description = payload.description.clone().unwrap_or(current.description);
+        let new_creator_id = payload.creator_id.clone().unwrap_or(current.creator_id);
+        let new_suggested_freelancer_id = payload
+            .suggested_freelancer_id
+            .unwrap_or(current.suggested_freelancer_id);
+        let new_attachment_url = payload
+            .attachment_url
+            .clone()
+            .unwrap_or(current.attachment_url);
+        let new_media_generation_id = payload
+            .media_generation_id
+            .unwrap_or(current.media_generation_id);
+
+        let updated = sqlx::query_as::<_, MarketplaceTask>(
+            r#"
+            UPDATE marketplace_tasks
+            SET content_id = $2,
+                task_type = $3,
+                description = $4,
+                creator_id = $5,
+                suggested_freelancer_id = $6,
+                attachment_url = $7,
+                media_generation_id = $8,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING id, content_id, status, task_type, description, creator_id,
+                      suggested_freelancer_id, attachment_url, media_generation_id,
+                      created_at, updated_at
+            "#,
+        )
+        .bind(id)
+        .bind(new_content_id)
+        .bind(&new_task_type)
+        .bind(&new_description)
+        .bind(&new_creator_id)
+        .bind(new_suggested_freelancer_id)
+        .bind(&new_attachment_url)
+        .bind(new_media_generation_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to update marketplace task: {e}"))?;
+
+        Ok(updated)
+    }
+
+    async fn delete(&self, id: Uuid) -> anyhow::Result<bool> {
+        let result = sqlx::query(r#"DELETE FROM marketplace_tasks WHERE id = $1"#)
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to delete marketplace task: {e}"))?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn update_status(&self, id: Uuid, status: &str) -> anyhow::Result<MarketplaceTask> {
+        let updated = sqlx::query_as::<_, MarketplaceTask>(
+            r#"
+            UPDATE marketplace_tasks
+            SET status = $2,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING id, content_id, status, task_type, description, creator_id,
+                      suggested_freelancer_id, attachment_url, media_generation_id,
+                      created_at, updated_at
+            "#,
+        )
+        .bind(id)
+        .bind(status)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to update marketplace task status: {e}"))?;
+
+        updated.ok_or_else(|| anyhow::anyhow!("marketplace task not found"))
+    }
 }
 
 #[cfg(test)]
@@ -301,5 +465,72 @@ mod tests {
             };
             assert_eq!(task.task_type, task_type);
         }
+    }
+
+    #[test]
+    fn test_create_marketplace_task_payload() {
+        let payload = CreateMarketplaceTaskPayload {
+            content_id: Uuid::new_v4(),
+            status: "open".to_string(),
+            task_type: "bid".to_string(),
+            description: Some("Test description".to_string()),
+            creator_id: Some("123".to_string()),
+            suggested_freelancer_id: Some(1),
+            attachment_url: Some("https://example.com/file.pdf".to_string()),
+            media_generation_id: None,
+        };
+        assert_eq!(payload.status, "open");
+        assert_eq!(payload.task_type, "bid");
+    }
+
+    #[test]
+    fn test_update_marketplace_task_payload_default() {
+        let payload = UpdateMarketplaceTaskPayload::default();
+        assert!(payload.content_id.is_none());
+        assert!(payload.task_type.is_none());
+        assert!(payload.description.is_none());
+        assert!(payload.creator_id.is_none());
+        assert!(payload.suggested_freelancer_id.is_none());
+        assert!(payload.attachment_url.is_none());
+        assert!(payload.media_generation_id.is_none());
+    }
+
+    #[test]
+    fn test_update_marketplace_task_payload_tri_state() {
+        // None = don't update
+        let payload = UpdateMarketplaceTaskPayload {
+            content_id: None,
+            task_type: None,
+            description: None,
+            creator_id: None,
+            suggested_freelancer_id: None,
+            attachment_url: None,
+            media_generation_id: None,
+        };
+        assert!(payload.description.is_none());
+
+        // Some(None) = explicitly set to NULL
+        let payload = UpdateMarketplaceTaskPayload {
+            content_id: None,
+            task_type: None,
+            description: Some(None),
+            creator_id: None,
+            suggested_freelancer_id: None,
+            attachment_url: None,
+            media_generation_id: None,
+        };
+        assert_eq!(payload.description, Some(None));
+
+        // Some(Some(v)) = set to value
+        let payload = UpdateMarketplaceTaskPayload {
+            content_id: None,
+            task_type: None,
+            description: Some(Some("new desc".to_string())),
+            creator_id: None,
+            suggested_freelancer_id: None,
+            attachment_url: None,
+            media_generation_id: None,
+        };
+        assert_eq!(payload.description, Some(Some("new desc".to_string())));
     }
 }

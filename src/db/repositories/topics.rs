@@ -4,6 +4,18 @@ use uuid::Uuid;
 
 use crate::db::pagination::PaginationQuery;
 
+/// Payload for partial update of a topic.
+/// Each field is `Option<Option<T>>` to distinguish between:
+/// - `None` — field not provided, leave unchanged
+/// - `Some(None)` — explicitly set to NULL
+/// - `Some(Some(v))` — set to value `v`
+#[derive(Debug, Clone, Default)]
+pub struct UpdateTopicPayload {
+    pub title: Option<String>,
+    pub sub_subject_id: Option<Option<i64>>,
+    pub thumbnail_url: Option<Option<String>>,
+}
+
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Topic {
     pub id: Uuid,
@@ -78,6 +90,19 @@ pub trait TopicsRepo: Send + Sync {
         pagination: &PaginationQuery,
     ) -> anyhow::Result<(Vec<Topic>, i64)>;
     async fn find_by_id(&self, id: Uuid) -> anyhow::Result<Option<TopicWithContents>>;
+
+    /// Update a topic with partial fields.
+    async fn update(&self, id: Uuid, payload: &UpdateTopicPayload) -> anyhow::Result<Topic>;
+
+    /// Delete a topic by ID. Returns `true` if a row was deleted.
+    async fn delete(&self, id: Uuid) -> anyhow::Result<bool>;
+
+    /// Set the `is_published` flag explicitly. Returns the updated value.
+    async fn set_publish(&self, id: Uuid, is_published: bool) -> anyhow::Result<bool>;
+
+    /// Reorder a topic up or down by swapping its `order` with the adjacent topic.
+    /// `direction` must be `"up"` or `"down"`.
+    async fn reorder(&self, id: Uuid, direction: &str) -> anyhow::Result<()>;
 }
 
 pub struct PgTopicsRepo {
@@ -148,6 +173,155 @@ impl TopicsRepo for PgTopicsRepo {
             .map_err(|e| anyhow::anyhow!("failed to fetch topics: {e}"))?;
 
         Ok((topics, total))
+    }
+
+    async fn update(&self, id: Uuid, payload: &UpdateTopicPayload) -> anyhow::Result<Topic> {
+        let current = sqlx::query_as::<_, Topic>(
+            r#"SELECT id, title, teacher_id, sub_subject_id, thumbnail_url,
+                     is_published, "order", owner_user_id, ownership_status,
+                     created_at, updated_at
+              FROM topics WHERE id = $1"#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("topic not found"))?;
+
+        let new_title = payload
+            .title
+            .clone()
+            .unwrap_or_else(|| current.title.clone());
+        let new_sub_subject_id = payload.sub_subject_id.unwrap_or(current.sub_subject_id);
+        let new_thumbnail_url = payload.thumbnail_url.clone().unwrap_or(current.thumbnail_url);
+
+        let updated = sqlx::query_as::<_, Topic>(
+            r#"
+            UPDATE topics
+            SET title = $2,
+                sub_subject_id = $3,
+                thumbnail_url = $4,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING id, title, teacher_id, sub_subject_id, thumbnail_url,
+                      is_published, "order", owner_user_id, ownership_status,
+                      created_at, updated_at
+            "#,
+        )
+        .bind(id)
+        .bind(&new_title)
+        .bind(new_sub_subject_id)
+        .bind(&new_thumbnail_url)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to update topic: {e}"))?;
+
+        Ok(updated)
+    }
+
+    async fn delete(&self, id: Uuid) -> anyhow::Result<bool> {
+        let result = sqlx::query(r#"DELETE FROM topics WHERE id = $1"#)
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to delete topic: {e}"))?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn set_publish(&self, id: Uuid, is_published: bool) -> anyhow::Result<bool> {
+        let row: Option<(bool,)> = sqlx::query_as(
+            r#"
+            UPDATE topics
+            SET is_published = $2,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING is_published
+            "#,
+        )
+        .bind(id)
+        .bind(is_published)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to set topic publish: {e}"))?;
+
+        row.map(|r| r.0)
+            .ok_or_else(|| anyhow::anyhow!("topic not found"))
+    }
+
+    async fn reorder(&self, id: Uuid, direction: &str) -> anyhow::Result<()> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to begin transaction: {e}"))?;
+
+        // Lock the current topic row
+        let current: (i32,) = sqlx::query_as(
+            r#"SELECT "order" FROM topics WHERE id = $1 FOR UPDATE"#,
+        )
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("topic not found"))?;
+
+        let current_order = current.0;
+
+        let neighbor = match direction {
+            "up" => {
+                // Find the topic with the highest order that is still < current_order
+                sqlx::query_as::<_, (Uuid, i32)>(
+                    r#"SELECT id, "order" FROM topics
+                       WHERE "order" < $1
+                       ORDER BY "order" DESC
+                       LIMIT 1
+                       FOR UPDATE"#,
+                )
+                .bind(current_order)
+                .fetch_optional(&mut *tx)
+                .await?
+            }
+            "down" => {
+                // Find the topic with the lowest order that is still > current_order
+                sqlx::query_as::<_, (Uuid, i32)>(
+                    r#"SELECT id, "order" FROM topics
+                       WHERE "order" > $1
+                       ORDER BY "order" ASC
+                       LIMIT 1
+                       FOR UPDATE"#,
+                )
+                .bind(current_order)
+                .fetch_optional(&mut *tx)
+                .await?
+            }
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "invalid direction '{}': must be 'up' or 'down'",
+                    direction
+                ));
+            }
+        };
+
+        let (neighbor_id, neighbor_order) = neighbor
+            .ok_or_else(|| anyhow::anyhow!("cannot move {} further — already at the edge", direction))?;
+
+        // Swap the two order values
+        sqlx::query(r#"UPDATE topics SET "order" = $2, updated_at = NOW() WHERE id = $1"#)
+            .bind(id)
+            .bind(neighbor_order)
+            .execute(&mut *tx)
+            .await?;
+
+        sqlx::query(r#"UPDATE topics SET "order" = $2, updated_at = NOW() WHERE id = $1"#)
+            .bind(neighbor_id)
+            .bind(current_order)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit()
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to commit reorder transaction: {e}"))?;
+
+        Ok(())
     }
 
     async fn find_by_id(&self, id: Uuid) -> anyhow::Result<Option<TopicWithContents>> {

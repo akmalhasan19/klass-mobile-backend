@@ -1,3 +1,4 @@
+pub mod admin;
 pub mod auth;
 pub mod avatar;
 pub mod contents;
@@ -50,6 +51,8 @@ pub fn api_router() -> Router<AppState> {
 
     let gallery_routes = Router::new().route("/", get(gallery::index));
 
+    let admin_routes = admin::admin_router();
+
     Router::new()
         .nest("/auth", auth_routes)
         .nest("/user", user_routes)
@@ -59,6 +62,7 @@ pub fn api_router() -> Router<AppState> {
         .nest("/student-progress", student_progress_routes)
         .nest("/homepage-sections", homepage_section_routes)
         .nest("/gallery", gallery_routes)
+        .nest("/admin", admin_routes)
         .route(
             "/homepage-recommendations",
             get(homepage_recommendations::index),

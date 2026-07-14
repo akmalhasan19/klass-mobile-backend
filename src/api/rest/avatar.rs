@@ -33,7 +33,7 @@ pub async fn upload_avatar(
     while let Some(field) = multipart
         .next_field()
         .await
-        .map_err(|e| AppError::Validation(format!("failed to read multipart field: {e}")))?
+        .map_err(|e| AppError::Validation(format!("failed to read multipart field: {e}")))? 
     {
         let name = field.name().unwrap_or("").to_string();
 
@@ -56,11 +56,14 @@ pub async fn upload_avatar(
     let mime = content_type
         .ok_or_else(|| AppError::Validation("missing content type for avatar file".into()))?;
 
-    let upload_result = r2::upload_avatar(
+    // Use the generalized upload() with the "avatars" category.
+    // Validation (size, mime type) is handled inside r2::upload against the
+    // avatars category config (2 MB max, JPEG/PNG/WebP only).
+    let upload_result = r2::upload(
         &state.s3_client,
         &state.config.r2_bucket_name,
         &state.config.r2_public_url,
-        principal.user_id,
+        "avatars",
         bytes,
         &mime,
     )
@@ -74,10 +77,10 @@ pub async fn upload_avatar(
         .await?
         .ok_or_else(|| AppError::NotFound("user not found".into()))?;
 
+    // Delete the old avatar from R2 if present
     if let Some(old_url) = &user.avatar_url {
         if let Some(old_key) = r2::extract_object_key(old_url, &state.config.r2_public_url) {
-            let _ =
-                r2::delete_object(&state.s3_client, &state.config.r2_bucket_name, &old_key).await;
+            let _ = r2::delete(&state.s3_client, &state.config.r2_bucket_name, &old_key).await;
         }
     }
 
