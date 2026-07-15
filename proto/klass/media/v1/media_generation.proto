@@ -131,6 +131,11 @@ message ArtifactInfo {
 
   // Checksum SHA-256 untuk verifikasi integritas (opsional).
   optional string checksum_sha256 = 5;
+
+  // Signed URL untuk preview HTML (marp HTML) — hanya diisi jika preview
+  // dihasilkan bersamaan dengan artifact (format pptx/pdf).
+  // Flutter: muat URL ini di InAppWebView untuk preview instan.
+  optional string preview_url = 6;
 }
 
 // PublicationLinks — referensi ke entity yang dibuat saat publikasi.
