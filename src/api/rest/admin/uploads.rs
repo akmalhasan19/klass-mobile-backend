@@ -14,7 +14,7 @@ use super::super::response;
 
 // ─── Query params ────────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct DeleteUploadQuery {
     pub path: String,
 }
@@ -28,6 +28,7 @@ pub struct DeleteUploadQuery {
 /// (defined in `UPLOAD_CATEGORIES` inside `src/storage/r2.rs`).
 ///
 /// Supported categories: `avatars`, `gallery`, `materials`, `attachments`.
+#[utoipa::path(post, path = "/api/v1/admin/upload/{category}", tag = "admin-uploads", params(("category" = String, Path)), responses((status = 201, description = "Created")), security(("bearer_auth" = [])))]
 pub async fn upload(
     State(state): State<AppState>,
     principal: Principal,
@@ -118,6 +119,7 @@ pub async fn upload(
 /// The `category` parameter is validated but not used for the actual deletion
 /// (the path itself encodes the category). It serves as a safety guard and
 /// for consistent routing.
+#[utoipa::path(delete, path = "/api/v1/admin/upload/{category}", tag = "admin-uploads", params(("category" = String, Path), ("path" = String, Query)), responses((status = 200, description = "Deleted", body = ())), security(("bearer_auth" = [])))]
 pub async fn delete(
     State(state): State<AppState>,
     principal: Principal,

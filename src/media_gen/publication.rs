@@ -141,7 +141,7 @@ impl ThumbnailGenerator for SvgFallbackGenerator {
     }
 }
 
-fn thumbnail_accent(mime_type: &str) -> &'static str {
+pub(crate) fn thumbnail_accent(mime_type: &str) -> &'static str {
     if mime_type.contains("pdf") {
         "#E74C3C"
     } else if mime_type.contains("presentation") {
@@ -151,7 +151,7 @@ fn thumbnail_accent(mime_type: &str) -> &'static str {
     }
 }
 
-fn mime_label(mime_type: &str) -> &'static str {
+pub(crate) fn mime_label(mime_type: &str) -> &'static str {
     if mime_type.contains("pdf") {
         "PDF Document"
     } else if mime_type.contains("presentation") {

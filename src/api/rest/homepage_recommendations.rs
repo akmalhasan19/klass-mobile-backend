@@ -37,14 +37,14 @@ use crate::state::AppState;
 
 // ─── Query params ────────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct HomepageRecommendationsQuery {
     limit: Option<usize>,
 }
 
 // ─── Output resources ────────────────────────────────────────────────────────
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct RecommendedProjectResource {
     pub id: String,
     pub title: String,
@@ -67,7 +67,7 @@ pub struct RecommendedProjectResource {
     pub updated_at: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct PersonalizationResource {
     pub eligible: bool,
     pub mode: Option<String>,
@@ -76,14 +76,14 @@ pub struct PersonalizationResource {
     pub has_adequate_taxonomy: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct VisibilityResource {
     pub is_active: bool,
     pub starts_at: Option<String>,
     pub ends_at: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct SectionMeta {
     pub key: String,
     pub label: Option<String>,
@@ -93,13 +93,13 @@ pub struct SectionMeta {
     pub admin_configurator_path: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct LimitMeta {
     pub requested: Option<usize>,
     pub applied: usize,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct PersonalizationMeta {
     pub policy_version: String,
     pub audience: String,
@@ -110,7 +110,7 @@ pub struct PersonalizationMeta {
     pub persona: Option<serde_json::Value>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct Meta {
     pub total: usize,
     pub section: SectionMeta,
@@ -121,14 +121,14 @@ pub struct Meta {
     pub personalization_detail: Option<PersonalizationSummary>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct SourceStatusResource {
     pub state: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suppressed_count: Option<usize>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct Response {
     pub data: Vec<RecommendedProjectResource>,
     pub meta: Meta,
@@ -137,6 +137,17 @@ pub struct Response {
 // ─── Handler ─────────────────────────────────────────────────────────────────
 
 /// `GET /api/v1/homepage-recommendations`
+#[utoipa::path(
+    get,
+    path = "/api/v1/homepage-recommendations",
+    tag = "homepage-recommendations",
+    params(
+        ("limit" = Option<usize>, Query, description = "Maximum number of items"),
+    ),
+    responses(
+        (status = 200, body = Response),
+    ),
+)]
 pub async fn index(
     State(state): State<AppState>,
     OptionalPrincipal(principal): OptionalPrincipal,

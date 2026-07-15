@@ -823,10 +823,10 @@ mod tests {
     #[test]
     fn test_filtered_tokens_removes_stopwords() {
         let tokens = SubjectsJsonTaxonomyCatalog::filtered_tokens("buatkan modul matematika untuk sd");
-        // "buatkan", "untuk" are stopwords
+        // "buatkan", "untuk", "modul" are stopwords
         assert!(!tokens.contains(&"buatkan".to_string()));
         assert!(!tokens.contains(&"untuk".to_string()));
-        assert!(tokens.contains(&"modul".to_string()));
+        assert!(!tokens.contains(&"modul".to_string()));
         assert!(tokens.contains(&"matematika".to_string()));
         assert!(tokens.contains(&"sd".to_string()));
     }

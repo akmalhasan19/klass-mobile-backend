@@ -1,7 +1,7 @@
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
-use chrono::{DateTime, Utc};
+use chrono::DateTime;
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -19,14 +19,14 @@ use super::super::response;
 
 // ─── Request bodies ──────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateStudentProgressRequest {
     pub student_name: String,
     pub score: i32,
     pub completion_date: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct UpdateStudentProgressRequest {
     pub student_name: Option<String>,
     pub score: Option<i32>,
@@ -36,6 +36,7 @@ pub struct UpdateStudentProgressRequest {
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 /// POST /admin/student-progress
+#[utoipa::path(post, path = "/api/v1/admin/student-progress", tag = "admin-student-progress", request_body = CreateStudentProgressRequest, responses((status = 201, description = "Created")), security(("bearer_auth" = [])))]
 pub async fn create(
     State(state): State<AppState>,
     principal: Principal,
@@ -71,7 +72,7 @@ pub async fn create(
                             .into(),
                     )
                 })?
-                .with_timezone(&Utc),
+                .naive_utc(),
         )
     } else {
         None
@@ -112,14 +113,15 @@ pub async fn create(
             "id": record.id,
             "student_name": record.student_name,
             "score": record.score,
-            "completion_date": record.completion_date.map(|d| d.to_rfc3339()),
-            "created_at": record.created_at.to_rfc3339(),
-            "updated_at": record.updated_at.to_rfc3339(),
+            "completion_date": record.completion_date.map(|d| d.and_utc().to_rfc3339()),
+            "created_at": record.created_at.map(|d| d.and_utc().to_rfc3339()),
+            "updated_at": record.updated_at.map(|d| d.and_utc().to_rfc3339()),
         }),
     ))
 }
 
 /// PATCH /admin/student-progress/{id}
+#[utoipa::path(patch, path = "/api/v1/admin/student-progress/{id}", tag = "admin-student-progress", params(("id" = Uuid, Path)), request_body = UpdateStudentProgressRequest, responses((status = 200, description = "Success")), security(("bearer_auth" = [])))]
 pub async fn update(
     State(state): State<AppState>,
     principal: Principal,
@@ -161,7 +163,7 @@ pub async fn update(
                                 .into(),
                         )
                     })?
-                    .with_timezone(&Utc),
+                    .naive_utc(),
             )),
             None => Some(None),
         }
@@ -210,14 +212,15 @@ pub async fn update(
             "id": record.id,
             "student_name": record.student_name,
             "score": record.score,
-            "completion_date": record.completion_date.map(|d| d.to_rfc3339()),
-            "created_at": record.created_at.to_rfc3339(),
-            "updated_at": record.updated_at.to_rfc3339(),
+            "completion_date": record.completion_date.map(|d| d.and_utc().to_rfc3339()),
+            "created_at": record.created_at.map(|d| d.and_utc().to_rfc3339()),
+            "updated_at": record.updated_at.map(|d| d.and_utc().to_rfc3339()),
         }),
     ))
 }
 
 /// DELETE /admin/student-progress/{id}
+#[utoipa::path(delete, path = "/api/v1/admin/student-progress/{id}", tag = "admin-student-progress", params(("id" = Uuid, Path)), responses((status = 200, description = "Deleted", body = ())), security(("bearer_auth" = [])))]
 pub async fn delete(
     State(state): State<AppState>,
     principal: Principal,

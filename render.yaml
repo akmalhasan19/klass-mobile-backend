@@ -39,6 +39,7 @@ services:
     region: singapore
     numInstances: 1
     healthCheckPath: /health
+    postDeployCommand: /usr/local/bin/klass-gateway --smoke-llm && /usr/local/bin/klass-gateway --smoke-python
     envVars:
       - key: PORT
         value: 8080
@@ -96,6 +97,8 @@ services:
         value: "3"
       - key: MEDIA_GENERATION__QUEUE__TIMEOUT_SECONDS
         value: "300"
+      - key: MEDIA_GENERATION__QUEUE__BACKOFF_SECONDS
+        value: "30"
       - key: MEDIA_GENERATION__QUEUE__CONCURRENCY
         value: "1"
       - envGroup: klass-shared-secrets
@@ -121,6 +124,8 @@ services:
         value: "3"
       - key: MEDIA_GENERATION__QUEUE__TIMEOUT_SECONDS
         value: "300"
+      - key: MEDIA_GENERATION__QUEUE__BACKOFF_SECONDS
+        value: "30"
       - key: MEDIA_GENERATION__QUEUE__CONCURRENCY
         value: "1"
       - envGroup: klass-shared-secrets

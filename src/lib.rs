@@ -13,5 +13,6 @@ pub mod orchestrator;
 pub mod providers;
 pub mod queue;
 pub mod recommendation;
+pub mod smoke;
 pub mod state;
 pub mod storage;

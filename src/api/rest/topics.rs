@@ -34,29 +34,29 @@ struct SubjectRow {
 
 // ─── Resources ───────────────────────────────────────────────────────────────
 
-#[derive(Serialize)]
-struct SubjectResource {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct SubjectResource {
     id: i64,
     name: String,
     slug: String,
 }
 
-#[derive(Serialize)]
-struct SubSubjectResource {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct SubSubjectResource {
     id: i64,
     subject_id: i64,
     name: String,
     slug: String,
 }
 
-#[derive(Serialize)]
-struct TaxonomyResource {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct TaxonomyResource {
     subject: Option<SubjectResource>,
     sub_subject: SubSubjectResource,
 }
 
-#[derive(Serialize)]
-struct PersonalizationResource {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct PersonalizationResource {
     eligible: bool,
     mode: String,
     has_adequate_taxonomy: bool,
@@ -64,8 +64,8 @@ struct PersonalizationResource {
     excluded_reason: Option<String>,
 }
 
-#[derive(Serialize)]
-struct MarketplaceTaskResource {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct MarketplaceTaskResource {
     id: Uuid,
     content_id: Uuid,
     status: String,
@@ -75,8 +75,8 @@ struct MarketplaceTaskResource {
     updated_at: Option<String>,
 }
 
-#[derive(Serialize)]
-struct ContentResource {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct ContentResource {
     id: Uuid,
     topic_id: Uuid,
     #[serde(rename = "type")]
@@ -90,8 +90,8 @@ struct ContentResource {
     updated_at: Option<String>,
 }
 
-#[derive(Serialize)]
-struct TopicResource {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct TopicResource {
     id: Uuid,
     title: String,
     teacher_id: String,
@@ -114,7 +114,7 @@ struct TopicResource {
 
 // ─── Query params ────────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema, utoipa::IntoParams)]
 pub struct TopicQueryParams {
     search: Option<String>,
     teacher_id: Option<String>,
@@ -129,6 +129,15 @@ pub struct TopicQueryParams {
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 /// GET /topics
+#[utoipa::path(
+    get,
+    path = "/api/v1/topics",
+    tag = "topics",
+    params(TopicQueryParams),
+    responses(
+        (status = 200, body = Vec<TopicResource>),
+    ),
+)]
 pub async fn index(
     State(state): State<AppState>,
     Query(params): Query<TopicQueryParams>,
@@ -212,6 +221,18 @@ pub async fn index(
 }
 
 /// GET /topics/{id}
+#[utoipa::path(
+    get,
+    path = "/api/v1/topics/{id}",
+    tag = "topics",
+    params(
+        ("id" = Uuid, Path, description = "Topic ID"),
+    ),
+    responses(
+        (status = 200, body = TopicResource),
+        (status = 404, description = "Topic not found"),
+    ),
+)]
 pub async fn show(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,

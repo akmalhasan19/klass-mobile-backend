@@ -11,7 +11,7 @@ use crate::storage::r2;
 use super::auth::UserResource;
 use super::response;
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct AvatarData {
     pub user: UserResource,
     pub avatar_url: String,
@@ -22,6 +22,18 @@ pub struct AvatarData {
 /// Accepts multipart form with a single file field named `file` (matches
 /// Laravel `StoreAvatarRequest` and the Flutter client `AuthApi.uploadAvatar`).
 /// Supported formats: JPEG, PNG, WebP. Max size: 2MB.
+#[utoipa::path(
+    post,
+    path = "/api/v1/user/avatar",
+    tag = "user",
+    responses(
+        (status = 200, body = AvatarData),
+        (status = 422, description = "Validation error"),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn upload_avatar(
     State(state): State<AppState>,
     principal: Principal,

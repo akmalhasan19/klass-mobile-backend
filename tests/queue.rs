@@ -150,7 +150,7 @@ async fn test_dlq_xadd() {
 
     cleanup_streams(&pool).await;
 
-    let dlq = DeadLetterService::new(pool.clone());
+    let _dlq = DeadLetterService::new(pool.clone());
 
     // We can't fully test send_to_dlq without a DB (it calls mark_failed),
     // but we can verify the DLQ stream is writable via lower-level check.

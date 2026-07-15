@@ -10,7 +10,6 @@
 //! 5. Max tries 3 → DLQ via `dead_letter`
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use deadpool_redis::Pool as RedisPool;
 use serde_json::Value;

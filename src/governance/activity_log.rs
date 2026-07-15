@@ -1,4 +1,3 @@
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -26,8 +25,8 @@ pub struct ActivityLog {
     pub subject_type: Option<String>,
     pub subject_id: Option<i64>,
     pub metadata: Option<serde_json::Value>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Option<chrono::NaiveDateTime>,
+    pub updated_at: Option<chrono::NaiveDateTime>,
 }
 
 /// Record an activity log entry.
@@ -100,8 +99,8 @@ mod tests {
             subject_type: Some("topic".to_string()),
             subject_id: Some(42),
             metadata: Some(serde_json::json!({"key": "value"})),
-            created_at: DateTime::from_timestamp(0, 0).unwrap(),
-            updated_at: DateTime::from_timestamp(0, 0).unwrap(),
+            created_at: chrono::NaiveDateTime::from_timestamp_opt(0, 0),
+            updated_at: chrono::NaiveDateTime::from_timestamp_opt(0, 0),
         };
 
         let debug = format!("{log:?}");
@@ -119,8 +118,8 @@ mod tests {
             subject_type: None,
             subject_id: None,
             metadata: None,
-            created_at: DateTime::from_timestamp(0, 0).unwrap(),
-            updated_at: DateTime::from_timestamp(0, 0).unwrap(),
+            created_at: chrono::NaiveDateTime::from_timestamp_opt(0, 0),
+            updated_at: chrono::NaiveDateTime::from_timestamp_opt(0, 0),
         };
 
         let json = serde_json::to_value(&log).unwrap();
@@ -140,8 +139,8 @@ mod tests {
             "subject_type": "topic",
             "subject_id": 100,
             "metadata": {"changed_fields": ["title"]},
-            "created_at": "2026-07-14T00:00:00Z",
-            "updated_at": "2026-07-14T00:00:00Z"
+            "created_at": "2026-07-14T00:00:00",
+            "updated_at": "2026-07-14T00:00:00"
         });
 
         let log: ActivityLog = serde_json::from_value(json).unwrap();
@@ -159,8 +158,8 @@ mod tests {
             "subject_type": null,
             "subject_id": null,
             "metadata": null,
-            "created_at": "2026-07-14T00:00:00Z",
-            "updated_at": "2026-07-14T00:00:00Z"
+            "created_at": "2026-07-14T00:00:00",
+            "updated_at": "2026-07-14T00:00:00"
         });
 
         let log: ActivityLog = serde_json::from_value(json).unwrap();
@@ -186,8 +185,8 @@ mod tests {
             subject_type: Some("user".to_string()),
             subject_id: Some(10),
             metadata: Some(metadata.clone()),
-            created_at: DateTime::from_timestamp(1720953600, 0).unwrap(),
-            updated_at: DateTime::from_timestamp(1720953600, 0).unwrap(),
+            created_at: chrono::NaiveDateTime::from_timestamp_opt(1720953600, 0),
+            updated_at: chrono::NaiveDateTime::from_timestamp_opt(1720953600, 0),
         };
 
         assert_eq!(log.action, "failed_login_attempt");

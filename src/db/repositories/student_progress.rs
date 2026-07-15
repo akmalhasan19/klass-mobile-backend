@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -10,9 +10,9 @@ pub struct StudentProgress {
     pub id: Uuid,
     pub student_name: String,
     pub score: Option<i32>,
-    pub completion_date: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub completion_date: Option<chrono::NaiveDateTime>,
+    pub created_at: Option<chrono::NaiveDateTime>,
+    pub updated_at: Option<chrono::NaiveDateTime>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -25,7 +25,7 @@ pub struct StudentProgressFilters {
 pub struct CreateStudentProgressPayload {
     pub student_name: String,
     pub score: i32,
-    pub completion_date: Option<DateTime<Utc>>,
+    pub completion_date: Option<chrono::NaiveDateTime>,
 }
 
 /// Payload for partial update of a student progress record.
@@ -37,7 +37,7 @@ pub struct CreateStudentProgressPayload {
 pub struct UpdateStudentProgressPayload {
     pub student_name: Option<String>,
     pub score: Option<i32>,
-    pub completion_date: Option<Option<DateTime<Utc>>>,
+    pub completion_date: Option<Option<chrono::NaiveDateTime>>,
 }
 
 #[async_trait]
@@ -221,9 +221,9 @@ mod tests {
             id: Uuid::new_v4(),
             student_name: "John Doe".to_string(),
             score: Some(85),
-            completion_date: Some(chrono::Utc::now()),
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
+            completion_date: Some(chrono::Utc::now().naive_utc()),
+            created_at: Some(chrono::Utc::now().naive_utc()),
+            updated_at: Some(chrono::Utc::now().naive_utc()),
         };
 
         assert_eq!(record.student_name, "John Doe");
@@ -238,8 +238,8 @@ mod tests {
             student_name: "Jane Smith".to_string(),
             score: None,
             completion_date: None,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
+            created_at: Some(chrono::Utc::now().naive_utc()),
+            updated_at: Some(chrono::Utc::now().naive_utc()),
         };
 
         assert_eq!(record.score, None);
@@ -255,8 +255,8 @@ mod tests {
                 student_name: "Test".to_string(),
                 score,
                 completion_date: None,
-                created_at: chrono::Utc::now(),
-                updated_at: chrono::Utc::now(),
+                created_at: Some(chrono::Utc::now().naive_utc()),
+                updated_at: Some(chrono::Utc::now().naive_utc()),
             };
             assert_eq!(record.score, score);
         }
@@ -267,7 +267,7 @@ mod tests {
         let payload = CreateStudentProgressPayload {
             student_name: "Budi".to_string(),
             score: 85,
-            completion_date: Some(Utc::now()),
+            completion_date: Some(chrono::Utc::now().naive_utc()),
         };
         assert_eq!(payload.student_name, "Budi");
         assert_eq!(payload.score, 85);

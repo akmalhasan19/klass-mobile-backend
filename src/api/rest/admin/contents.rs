@@ -17,7 +17,7 @@ use super::super::response;
 
 // ─── Request bodies ──────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateContentRequest {
     pub topic_id: Uuid,
     #[serde(rename = "type")]
@@ -27,7 +27,7 @@ pub struct CreateContentRequest {
     pub media_url: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct UpdateContentRequest {
     pub topic_id: Option<Uuid>,
     #[serde(rename = "type")]
@@ -37,12 +37,12 @@ pub struct UpdateContentRequest {
     pub media_url: Option<Option<String>>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct ReorderRequest {
     pub direction: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct PublishRequest {
     pub is_published: bool,
 }
@@ -50,6 +50,7 @@ pub struct PublishRequest {
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 /// POST /admin/contents
+#[utoipa::path(post, path = "/api/v1/admin/contents", tag = "admin-contents", request_body = CreateContentRequest, responses((status = 201, description = "Created")), security(("bearer_auth" = [])))]
 pub async fn create(
     State(state): State<AppState>,
     principal: Principal,
@@ -114,6 +115,7 @@ pub async fn create(
 }
 
 /// PATCH /admin/contents/{id}
+#[utoipa::path(patch, path = "/api/v1/admin/contents/{id}", tag = "admin-contents", params(("id" = Uuid, Path)), request_body = UpdateContentRequest, responses((status = 200, description = "Success")), security(("bearer_auth" = [])))]
 pub async fn update(
     State(state): State<AppState>,
     principal: Principal,
@@ -187,6 +189,7 @@ pub async fn update(
 }
 
 /// DELETE /admin/contents/{id}
+#[utoipa::path(delete, path = "/api/v1/admin/contents/{id}", tag = "admin-contents", params(("id" = Uuid, Path)), responses((status = 200, description = "Deleted", body = ())), security(("bearer_auth" = [])))]
 pub async fn delete(
     State(state): State<AppState>,
     principal: Principal,
@@ -229,6 +232,7 @@ pub async fn delete(
 /// Body: `{ "direction": "up" | "down" }`
 /// Swaps the content's `order` with the adjacent content within the same topic_id group.
 /// Operations are performed inside a `BEGIN...SELECT FOR UPDATE...COMMIT` transaction.
+#[utoipa::path(patch, path = "/api/v1/admin/contents/{id}/reorder", tag = "admin-contents", params(("id" = Uuid, Path)), request_body = ReorderRequest, responses((status = 200, description = "Success")), security(("bearer_auth" = [])))]
 pub async fn reorder(
     State(state): State<AppState>,
     principal: Principal,
@@ -286,6 +290,7 @@ pub async fn reorder(
 ///
 /// Body: `{ "is_published": true | false }`
 /// Sets the content's `is_published` flag to the given value (idempotent).
+#[utoipa::path(patch, path = "/api/v1/admin/contents/{id}/publish", tag = "admin-contents", params(("id" = Uuid, Path)), request_body = PublishRequest, responses((status = 200, description = "Success")), security(("bearer_auth" = [])))]
 pub async fn publish(
     State(state): State<AppState>,
     principal: Principal,

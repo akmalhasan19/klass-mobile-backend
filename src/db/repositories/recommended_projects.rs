@@ -199,19 +199,20 @@ impl RecommendedProjectsRepo for PgRecommendedProjectsRepo {
 
     async fn find_all(&self, filters: &RecommendedProjectFilters) -> anyhow::Result<Vec<RecommendedProject>> {
         let mut conditions: Vec<String> = Vec::new();
+        #[allow(unused_assignments)]
         let mut param_idx = 1u32;
 
-        if let Some(ref source_type) = filters.source_type {
+        if filters.source_type.is_some() {
             conditions.push(format!("source_type = ${param_idx}"));
             param_idx += 1;
         }
 
-        if let Some(is_active) = filters.is_active {
+        if filters.is_active.is_some() {
             conditions.push(format!("is_active = ${param_idx}"));
             param_idx += 1;
         }
 
-        if let Some(ref search) = filters.search {
+        if filters.search.is_some() {
             conditions.push(format!("title ILIKE ${param_idx}"));
             param_idx += 1;
         }
@@ -434,6 +435,7 @@ impl RecommendedProjectsRepo for PgRecommendedProjectsRepo {
 /// Returns `Vec<String>` where each entry is `"column = $N"` for non-None fields.
 fn dynamic_update_set(payload: &UpdateRecommendedProject) -> Vec<String> {
     let mut parts = Vec::new();
+    #[allow(unused_assignments)]
     let mut idx = 1u32;
 
     macro_rules! add_col {

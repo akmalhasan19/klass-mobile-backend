@@ -2,12 +2,15 @@ pub mod activity_logs;
 pub mod contents;
 pub mod homepage_sections;
 pub mod marketplace_tasks;
+pub mod media_generations;
+pub mod media_generations_debug;
+pub mod recommended_projects;
 pub mod student_progress;
 pub mod system_settings;
 pub mod topics;
 pub mod uploads;
 
-use axum::routing::{get, patch, post};
+use axum::routing::{get, patch, post, put};
 use axum::Router;
 
 use crate::auth::middleware::Principal;
@@ -73,6 +76,19 @@ pub fn admin_router() -> Router<AppState> {
     let system_setting_routes = Router::new()
         .route("/", get(system_settings::index).patch(system_settings::bulk_update));
 
+    let media_generation_routes = Router::new()
+        .route("/", get(media_generations::index))
+        .route("/{id}/debug-taxonomy", get(media_generations_debug::debug_taxonomy));
+
+    let recommended_project_routes = Router::new()
+        .route("/", post(recommended_projects::create))
+        .route(
+            "/{id}",
+            put(recommended_projects::update).delete(recommended_projects::delete),
+        )
+        .route("/{id}/toggle-active", patch(recommended_projects::toggle_active))
+        .route("/{id}/show-now", patch(recommended_projects::show_now));
+
     Router::new()
         .nest("/topics", topic_routes)
         .nest("/contents", content_routes)
@@ -82,4 +98,6 @@ pub fn admin_router() -> Router<AppState> {
         .nest("/activity-logs", activity_log_routes)
         .nest("/homepage-sections", homepage_section_routes)
         .nest("/settings", system_setting_routes)
+        .nest("/media-generations", media_generation_routes)
+        .nest("/homepage-sections/recommended-projects", recommended_project_routes)
 }

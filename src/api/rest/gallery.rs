@@ -15,8 +15,8 @@ use super::response;
 
 // ─── Resources ───────────────────────────────────────────────────────────────
 
-#[derive(Serialize)]
-struct TopicResource {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct TopicResource {
     id: Uuid,
     title: String,
     teacher_id: String,
@@ -30,8 +30,8 @@ struct TopicResource {
     updated_at: Option<String>,
 }
 
-#[derive(Serialize)]
-struct ContentResource {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct ContentResource {
     id: Uuid,
     topic_id: Uuid,
     #[serde(rename = "type")]
@@ -47,7 +47,7 @@ struct ContentResource {
 
 // ─── Query params ────────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema, utoipa::IntoParams)]
 pub struct GalleryQueryParams {
     search: Option<String>,
     topic_id: Option<Uuid>,
@@ -60,6 +60,15 @@ pub struct GalleryQueryParams {
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 /// GET /gallery
+#[utoipa::path(
+    get,
+    path = "/api/v1/gallery",
+    tag = "gallery",
+    params(GalleryQueryParams),
+    responses(
+        (status = 200, body = Vec<ContentResource>),
+    ),
+)]
 pub async fn index(
     State(state): State<AppState>,
     Query(params): Query<GalleryQueryParams>,

@@ -20,8 +20,8 @@ use super::super::response;
 
 /// A single setting as returned to the admin client.
 /// Boolean values are properly deserialized (true/false) rather than strings.
-#[derive(Serialize)]
-struct SettingResource {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct SettingResource {
     key: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     value: Option<serde_json::Value>,
@@ -36,7 +36,7 @@ type GroupedSettingsResource = HashMap<String, Vec<SettingResource>>;
 
 // ─── Request body ────────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct BulkUpdateSettingsRequest {
     /// A flat map of key → value for settings to update.
     /// Keys not in the database are silently skipped.
@@ -50,6 +50,7 @@ pub struct BulkUpdateSettingsRequest {
 /// Returns all system settings grouped by their `group` column, ordered by
 /// group and key. Boolean settings have their value parsed as a proper JSON
 /// boolean (`true`/`false`) rather than a raw string.
+#[utoipa::path(get, path = "/api/v1/admin/settings", tag = "admin-settings", responses((status = 200, description = "Success", body = HashMap<String, Vec<SettingResource>>)), security(("bearer_auth" = [])))]
 pub async fn index(
     State(state): State<AppState>,
     principal: Principal,
@@ -101,6 +102,7 @@ pub async fn index(
 /// (e.g. `"1"` → `"true"`, `"yes"` → `"true"`, `"off"` → `"false"`).
 ///
 /// Returns the updated (grouped) settings after the operation.
+#[utoipa::path(patch, path = "/api/v1/admin/settings", tag = "admin-settings", request_body = BulkUpdateSettingsRequest, responses((status = 200, description = "Success")), security(("bearer_auth" = [])))]
 pub async fn bulk_update(
     State(state): State<AppState>,
     principal: Principal,

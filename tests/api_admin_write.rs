@@ -16,6 +16,10 @@ async fn response_body(response: axum::response::Response) -> (StatusCode, Value
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let json: Value = serde_json::from_slice(&body)
         .unwrap_or_else(|_| serde_json::json!({"raw": String::from_utf8_lossy(&body).to_string()}));
+    
+    if status.is_server_error() || status.is_client_error() {
+        eprintln!("API Error -> status: {}, body: {}", status, json);
+    }
     (status, json)
 }
 
@@ -144,61 +148,77 @@ struct AdminSeed {
 async fn seed_test_data(pool: &PgPool) -> AdminSeed {
     let (user_id, token) = seed_admin(pool).await;
 
+    let subj_slug = format!("fisika-{}", Uuid::new_v4());
     let subject_id: i64 = sqlx::query_scalar(
-        "INSERT INTO subjects (name, slug) VALUES ('Fisika', 'fisika') RETURNING id",
+        "INSERT INTO subjects (name, slug) VALUES ('Fisika', $1) RETURNING id",
     )
+    .bind(&subj_slug)
     .fetch_one(pool)
     .await
     .unwrap();
 
+    let sub_subj_slug = format!("mekanika-{}", Uuid::new_v4());
     let sub_subject_id: i64 = sqlx::query_scalar(
-        "INSERT INTO sub_subjects (subject_id, name, slug) VALUES ($1, 'Mekanika', 'mekanika') RETURNING id",
+        "INSERT INTO sub_subjects (subject_id, name, slug) VALUES ($1, 'Mekanika', $2) RETURNING id",
     )
     .bind(subject_id)
+    .bind(&sub_subj_slug)
     .fetch_one(pool)
     .await
     .unwrap();
 
-    let topic_id: Uuid = sqlx::query_scalar(
-        r#"INSERT INTO topics (title, teacher_id, sub_subject_id, is_published, "order", ownership_status)
-           VALUES ('Admin Topic Test', 'admin_teacher', $1, true, 1, 'normalized')
+    let topic_id = Uuid::new_v4();
+    let _: Uuid = sqlx::query_scalar(
+        r#"INSERT INTO topics (id, title, teacher_id, sub_subject_id, is_published, "order", ownership_status)
+           VALUES ($1, 'Admin Topic Test', 'admin_teacher', $2, true, 1, 'normalized')
            RETURNING id"#,
     )
+    .bind(topic_id)
     .bind(sub_subject_id)
     .fetch_one(pool)
     .await
     .unwrap();
 
-    let content_id: Uuid = sqlx::query_scalar(
-        r#"INSERT INTO contents (topic_id, type, title, media_url, is_published, "order")
-           VALUES ($1, 'module', 'Admin Content Test', 'https://example.com/test.pdf', true, 1)
+    let content_id = Uuid::new_v4();
+    let _: Uuid = sqlx::query_scalar(
+        r#"INSERT INTO contents (id, topic_id, type, title, media_url, is_published, "order")
+           VALUES ($1, $2, 'module', 'Admin Content Test', 'https://example.com/test.pdf', true, 1)
            RETURNING id"#,
     )
+    .bind(content_id)
     .bind(topic_id)
     .fetch_one(pool)
     .await
     .unwrap();
 
-    let task_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO marketplace_tasks (content_id, status, task_type) VALUES ($1, 'open', 'bid') RETURNING id",
+    let task_id = Uuid::new_v4();
+    let _: Uuid = sqlx::query_scalar(
+        "INSERT INTO marketplace_tasks (id, content_id, status, task_type) VALUES ($1, $2, 'open', 'bid') RETURNING id",
     )
+    .bind(task_id)
     .bind(content_id)
     .fetch_one(pool)
     .await
     .unwrap();
 
-    let progress_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO student_progress (student_name, score) VALUES ('Admin Test Student', 75) RETURNING id",
+    let progress_id = Uuid::new_v4();
+    let _: Uuid = sqlx::query_scalar(
+        "INSERT INTO student_progress (id, student_name, score) VALUES ($1, 'Admin Test Student', 75) RETURNING id",
     )
+    .bind(progress_id)
     .fetch_one(pool)
     .await
     .unwrap();
 
-    let section_id: Uuid = sqlx::query_scalar(
-        r#"INSERT INTO homepage_sections (key, label, position, is_enabled)
-           VALUES ('admin_test_section', 'Admin Test Section', 5, true)
+    let section_id = Uuid::new_v4();
+    let section_key = format!("admin_test_section_{}", Uuid::new_v4());
+    let _: Uuid = sqlx::query_scalar(
+        r#"INSERT INTO homepage_sections (id, key, label, position, is_enabled)
+           VALUES ($1, $2, 'Admin Test Section', 5, true)
            RETURNING id"#,
     )
+    .bind(section_id)
+    .bind(&section_key)
     .fetch_one(pool)
     .await
     .unwrap();
@@ -548,7 +568,8 @@ async fn test_admin_student_progress_crud() {
     // ── Create ───────────────────────────────────────────────────────────
     let create_body = serde_json::json!({
         "student_name": "Budi Test",
-        "score": 92
+        "score": 92,
+        "completion_date": "2026-07-15T00:00:00Z"
     });
     let (status, json) = post_json(
         &ctx.app,
@@ -663,10 +684,12 @@ async fn test_admin_system_settings_read_update() {
     let seed = seed_test_data(&ctx.pool).await;
 
     // Seed a system setting for testing
+    let setting_key = format!("test_admin_setting_{}", Uuid::new_v4());
     sqlx::query(
         r#"INSERT INTO system_settings (key, value, type, "group", description)
-           VALUES ('test_admin_setting', 'initial_value', 'text', 'general', 'Test setting for admin test')"#,
+           VALUES ($1, 'initial_value', 'text', 'general', 'Test setting for admin test')"#,
     )
+    .bind(&setting_key)
     .execute(&ctx.pool)
     .await
     .unwrap();
@@ -681,7 +704,7 @@ async fn test_admin_system_settings_read_update() {
     // ── PATCH update ───────────────────────────────────────────────────────
     let body = serde_json::json!({
         "settings": {
-            "test_admin_setting": "updated_value"
+            setting_key.clone(): "updated_value"
         }
     });
     let (status, _json) = patch_json(
@@ -695,15 +718,17 @@ async fn test_admin_system_settings_read_update() {
 
     // ── Verify value was updated ─────────────────────────────────────────
     let db_value: Option<String> = sqlx::query_scalar(
-        "SELECT value FROM system_settings WHERE key = 'test_admin_setting'",
+        "SELECT value FROM system_settings WHERE key = $1",
     )
+    .bind(&setting_key)
     .fetch_one(&ctx.pool)
     .await
     .unwrap();
     assert_eq!(db_value.as_deref(), Some("updated_value"));
 
     // Cleanup seeded setting
-    let _ = sqlx::query("DELETE FROM system_settings WHERE key = 'test_admin_setting'")
+    let _ = sqlx::query("DELETE FROM system_settings WHERE key = $1")
+        .bind(&setting_key)
         .execute(&ctx.pool)
         .await;
 
@@ -761,7 +786,7 @@ async fn test_admin_activity_logs_list() {
 
     // ── Filter by date range ─────────────────────────────────────────────
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    let (status, json) = get_json(
+    let (status, _json) = get_json(
         &ctx.app,
         &format!("/admin/activity-logs?date_from={}&date_to={}", now, now),
         &seed.token,
@@ -770,7 +795,7 @@ async fn test_admin_activity_logs_list() {
     assert_eq!(status, StatusCode::OK);
 
     // ── Search ───────────────────────────────────────────────────────────
-    let (status, json) = get_json(
+    let (status, _json) = get_json(
         &ctx.app,
         "/admin/activity-logs?search=update_topic",
         &seed.token,
@@ -859,11 +884,13 @@ async fn test_admin_reorder_topic() {
     let seed = seed_test_data(&ctx.pool).await;
 
     // Create a second topic in the same sub_subject for reorder testing
-    let topic2_id: Uuid = sqlx::query_scalar(
-        r#"INSERT INTO topics (title, teacher_id, sub_subject_id, is_published, "order", ownership_status)
-           VALUES ('Reorder Topic 2', 'admin_teacher', $1, true, 2, 'normalized')
+    let topic2_id = Uuid::new_v4();
+    let _: Uuid = sqlx::query_scalar(
+        r#"INSERT INTO topics (id, title, teacher_id, sub_subject_id, is_published, "order", ownership_status)
+           VALUES ($1, 'Reorder Topic 2', 'admin_teacher', $2, true, 2, 'normalized')
            RETURNING id"#,
     )
+    .bind(topic2_id)
     .bind(seed.sub_subject_id)
     .fetch_one(&ctx.pool)
     .await

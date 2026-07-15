@@ -33,7 +33,7 @@ fn require_teacher(principal: &Principal) -> Result<(), AppError> {
 
 // ─── Request bodies ───────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct SuggestFreelancersRequest {
     #[serde(default = "default_max_suggestions")]
     pub max_suggestions: usize,
@@ -43,14 +43,14 @@ fn default_max_suggestions() -> usize {
     5
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum HireMode {
     AutoSuggest,
     ManualTask,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct HireFreelancerRequest {
     pub mode: HireMode,
     pub freelancer_id: Option<i64>,
@@ -58,7 +58,7 @@ pub struct HireFreelancerRequest {
 
 // ─── Resources ────────────────────────────────────────────────────────────────
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct FreelancerMatchResource {
     pub freelancer_id: i64,
     pub name: String,
@@ -71,7 +71,7 @@ pub struct FreelancerMatchResource {
     pub match_score: f64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct HiredFreelancerResource {
     pub task_id: Uuid,
     pub media_generation_id: Uuid,
@@ -84,6 +84,21 @@ pub struct HiredFreelancerResource {
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
 /// POST /media-generations/{id}/suggest-freelancers
+#[utoipa::path(
+    post,
+    path = "/api/v1/media-generations/{id}/suggest-freelancers",
+    tag = "media-generations",
+    params(
+        ("id" = Uuid, Path, description = "Media generation ID"),
+    ),
+    request_body = SuggestFreelancersRequest,
+    responses(
+        (status = 200, body = Vec<FreelancerMatchResource>),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn suggest_freelancers(
     State(state): State<AppState>,
     principal: Principal,
@@ -142,6 +157,21 @@ pub async fn suggest_freelancers(
 }
 
 /// POST /media-generations/{id}/hire-freelancer
+#[utoipa::path(
+    post,
+    path = "/api/v1/media-generations/{id}/hire-freelancer",
+    tag = "media-generations",
+    params(
+        ("id" = Uuid, Path, description = "Media generation ID"),
+    ),
+    request_body = HireFreelancerRequest,
+    responses(
+        (status = 201, body = HiredFreelancerResource),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn hire_freelancer(
     State(state): State<AppState>,
     principal: Principal,

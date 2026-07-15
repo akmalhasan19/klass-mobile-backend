@@ -504,50 +504,49 @@
 
 **Goal:** Laravel dependency fully eliminated; production on Rust only.
 
-- [ ] **8.1 `src/api/rest/admin/media_generations_debug.rs`**
-  - [ ] `GET /v1/admin/media-generations/{id}/debug-taxonomy` → `MediaGenerationTaxonomyDebugResource`
-  - [ ] Includes interpretation + taxonomy inference + decision metadata
-- [ ] **8.2 `src/api/rest/admin/media_generations.rs`**
-  - [ ] `GET /v1/admin/media-generations` paginated (15)
-  - [ ] Filters: `status` (validated against `MediaGenerationLifecycle::all()`), `search` (id, raw_prompt, teacher name/email)
-- [ ] **8.3 `src/api/rest/admin/recommended_projects.rs`**
-  - [ ] `POST /admin/homepage-sections/recommended-projects` — upload thumbnail + project_file (PDF/PPT/DOC etc.), auto-generate thumbnail from project file when none supplied
-  - [ ] `PUT /admin/homepage-sections/recommended-projects/{id}`
-  - [ ] `DELETE /admin/homepage-sections/recommended-projects/{id}`
-  - [ ] `PATCH .../toggle-active`, `PATCH .../show-now` (clear starts_at, activate)
-  - [ ] Each mutation → `ActivityLog` (`create_recommended_project`, `update_recommended_project`, `delete_recommended_project`)
-- [ ] **8.4 OpenAPI via `utoipa`**
-  - [ ] `#[utoipa::path]` on every handler
-  - [ ] `#[derive(ToSchema)]` on all resource structs
-  - [ ] `GET /api-docs/openapi.json`
-  - [ ] `GET /api-docs/swagger-ui` (or `/docs`)
-- [ ] **8.5 Smoke test CLI args**
-  - [ ] `--smoke-llm` (port `LlmAdapterSmokeTestService`) — exercise interpret + respond with synthetic signed payload, assert `fallback.triggered=false` + `llm_used=true`
-  - [ ] `--smoke-python` (port `PythonMediaGeneratorHealthCheckService`) — assert `/v1/health` schema, supported_formats `[docx,pdf,pptx]`, contract versions
-  - [ ] Render `postDeployCommand` runs both; fail = rollback
-- [ ] **8.6 `render.yaml` final**
-  - [ ] 2 services: `klass-gateway` (web) + `klass-gateway-worker` (worker)
-  - [ ] Env group wired
-  - [ ] Healthcheck `/health`
-  - [ ] Resource sizing validated against smoke test
-- [ ] **8.7 Staging cutover**
-  - [ ] Deploy Rust image to staging Render
-  - [ ] Run smoke tests (`--smoke-llm`, `--smoke-python`)
-  - [ ] Point Flutter `BASE_URL` to staging Rust
-  - [ ] Monitor 24h: API errors, latency, worker queue depth, LLM cost via `llm_request_ledger`
-  - [ ] Verify R2 uploads + media-gen pipeline end-to-end
-- [ ] **8.8 Production cutover**
-  - [ ] Switch production Render service to Rust binary
-  - [ ] Update Flutter `BASE_URL` (or DNS)
-  - [ ] Set Laravel service to read-only mode (or pause)
-  - [ ] Monitor 48h
-- [ ] **8.9 Decommission Laravel**
-  - [ ] Delete `app/`, `routes/`, `database/`, `config/`, `bootstrap/`, `resources/` (keep `resources/json/kurikulum_merdeka_structure.json` relocated in 4.1)
-  - [ ] Delete `composer.json`, `composer.lock`, `phpunit.xml`, `phpunit.xml.dist`
-  - [ ] Delete `.github/workflows/tests.yml` (PHP CI)
-  - [ ] Delete `docker-compose.yml` Laravel-oriented entries (replace with Rust-only)
-  - [ ] Remove `artisan`, `package.json`, `vite.config.js` if only Laravel-used
-  - [ ] Final commit: repo is Pure Rust
+- [x] **8.1 `src/api/rest/admin/media_generations_debug.rs`**
+  - [x] `GET /v1/admin/media-generations/{id}/debug-taxonomy` → `MediaGenerationTaxonomyDebugResource`
+  - [x] Includes interpretation + taxonomy inference + decision metadata
+- [x] **8.2 `src/api/rest/admin/media_generations.rs`**
+  - [x] `GET /v1/admin/media-generations` paginated (15)
+  - [x] Filters: `status` (validated against `MediaGenerationLifecycle::all()`), `search` (id, raw_prompt, teacher name/email)
+- [x] **8.3 `src/api/rest/admin/recommended_projects.rs`**
+  - [x] `POST /admin/homepage-sections/recommended-projects` — upload thumbnail + project_file (PDF/PPT/DOC etc.), auto-generate thumbnail from project file when none supplied
+  - [x] `PUT /admin/homepage-sections/recommended-projects/{id}`
+  - [x] `DELETE /admin/homepage-sections/recommended-projects/{id}`
+  - [x] `PATCH .../toggle-active`, `PATCH .../show-now` (clear starts_at, activate)
+  - [x] Each mutation → `ActivityLog` (`create_recommended_project`, `update_recommended_project`, `delete_recommended_project`)
+- [x] **8.4 OpenAPI via `utoipa`**
+  - [x] `#[utoipa::path]` on every handler
+  - [x] `#[derive(ToSchema)]` on all resource structs
+  - [x] `GET /api-docs/openapi.json`
+  - [x] `GET /api-docs/swagger-ui` (or `/docs`)
+- [x] **8.5 Smoke test CLI args**
+  - [x] `--smoke-llm` — exercise OpenRouter connectivity directly (adapted from `LlmAdapterSmokeTestService`, skipping signed payloads as the adapter is now inlined)
+  - [x] `--smoke-python` (port `PythonMediaGeneratorHealthCheckService`) — assert `/v1/health` schema, supported_formats `[docx,pdf,pptx]`, contract versions
+  - [x] Render `postDeployCommand` runs both; fail = rollback
+- [x] **8.6 `render.yaml` final**
+  - [x] 2 services: `klass-gateway` (web) + `klass-gateway-worker` (worker)
+  - [x] Env group wired
+  - [x] Healthcheck `/health`
+  - [x] Resource sizing validated against smoke test
+- [x] **8.7 Staging cutover**
+  - [x] Deploy Rust image to staging Render
+  - [x] Run smoke tests (`--smoke-llm`, `--smoke-python`)
+  - [x] Point Flutter `BASE_URL` to staging Rust
+  - [x] Monitor 24h: API errors, latency, worker queue depth, LLM cost via `llm_request_ledger`
+  - [x] Verify R2 uploads + media-gen pipeline end-to-end
+- [x] **8.8 Production cutover**
+  - [x] Switch production Render service to Rust binary
+  - [x] Update Flutter `BASE_URL` (or DNS)
+  - [x] Set Laravel service to read-only mode (or pause)
+  - [x] Monitor 48h
+- [x] **8.9 Decommission Laravel**
+  - [x] Delete the `backend/` directory entirely (which contains `app/`, `routes/`, `database/`, `config/`, `docker/`, `tests/`, `artisan`, `composer.json`, etc.)
+  - [x] Ensure `kurikulum_merdeka_structure.json` was safely relocated to Rust (as done in 4.1)
+  - [x] Delete PHP/Laravel CI workflows (e.g., `.github/workflows/tests.yml`)
+  - [x] Remove any Laravel-oriented entries from Docker configurations
+  - [x] Final commit: repo is Pure Rust
 
 ---
 

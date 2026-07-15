@@ -141,14 +141,14 @@ mod tests {
             remember_token: None,
             security_question: None,
             security_answer: None,
-            created_at: chrono::NaiveDateTime::new(
+            created_at: Some(chrono::NaiveDateTime::new(
                 chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
                 chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap(),
-            ),
-            updated_at: chrono::NaiveDateTime::new(
+            )),
+            updated_at: Some(chrono::NaiveDateTime::new(
                 chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
                 chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap(),
-            ),
+            )),
         }
     }
 

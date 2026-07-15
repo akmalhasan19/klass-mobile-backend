@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+
 use sqlx::PgPool;
 use std::collections::HashMap;
 
@@ -15,8 +15,8 @@ pub struct SystemSetting {
     #[sqlx(rename = "group")]
     pub setting_group: String,
     pub description: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Option<chrono::NaiveDateTime>,
+    pub updated_at: Option<chrono::NaiveDateTime>,
 }
 
 // ─── Bulk update item ────────────────────────────────────────────────────────
@@ -265,8 +265,8 @@ mod tests {
             setting_type: "text".to_string(),
             setting_group: "general".to_string(),
             description: Some("Application name".to_string()),
-            created_at: DateTime::from_timestamp(0, 0).unwrap(),
-            updated_at: DateTime::from_timestamp(0, 0).unwrap(),
+            created_at: chrono::NaiveDateTime::from_timestamp_opt(0, 0),
+            updated_at: chrono::NaiveDateTime::from_timestamp_opt(0, 0),
         };
 
         assert_eq!(setting.key, "site_name");
@@ -284,8 +284,8 @@ mod tests {
             setting_type: "boolean".to_string(),
             setting_group: "features".to_string(),
             description: None,
-            created_at: DateTime::from_timestamp(0, 0).unwrap(),
-            updated_at: DateTime::from_timestamp(0, 0).unwrap(),
+            created_at: chrono::NaiveDateTime::from_timestamp_opt(0, 0),
+            updated_at: chrono::NaiveDateTime::from_timestamp_opt(0, 0),
         };
 
         assert!(setting.value.is_none());
@@ -430,8 +430,8 @@ mod tests {
             setting_type: "text".to_string(),
             setting_group: "general".to_string(),
             description: None,
-            created_at: DateTime::from_timestamp(0, 0).unwrap(),
-            updated_at: DateTime::from_timestamp(0, 0).unwrap(),
+            created_at: chrono::NaiveDateTime::from_timestamp_opt(0, 0),
+            updated_at: chrono::NaiveDateTime::from_timestamp_opt(0, 0),
         };
 
         let s2 = SystemSetting {
@@ -441,8 +441,8 @@ mod tests {
             setting_type: "number".to_string(),
             setting_group: "general".to_string(),
             description: None,
-            created_at: DateTime::from_timestamp(0, 0).unwrap(),
-            updated_at: DateTime::from_timestamp(0, 0).unwrap(),
+            created_at: chrono::NaiveDateTime::from_timestamp_opt(0, 0),
+            updated_at: chrono::NaiveDateTime::from_timestamp_opt(0, 0),
         };
 
         let s3 = SystemSetting {
@@ -452,8 +452,8 @@ mod tests {
             setting_type: "boolean".to_string(),
             setting_group: "features".to_string(),
             description: None,
-            created_at: DateTime::from_timestamp(0, 0).unwrap(),
-            updated_at: DateTime::from_timestamp(0, 0).unwrap(),
+            created_at: chrono::NaiveDateTime::from_timestamp_opt(0, 0),
+            updated_at: chrono::NaiveDateTime::from_timestamp_opt(0, 0),
         };
 
         grouped
@@ -480,7 +480,7 @@ mod tests {
 
     #[test]
     fn test_get_with_fallback_default() {
-        let key = "nonexistent";
+        let _key = "nonexistent";
         let default = Some("fallback");
         let result = default.map(String::from);
         assert_eq!(result, Some("fallback".to_string()));

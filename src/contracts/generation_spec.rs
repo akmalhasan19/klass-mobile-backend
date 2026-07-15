@@ -39,6 +39,7 @@ pub struct SpecContentDraft {
     #[garde(length(min = 1, max = 1000))]
     pub summary: String,
     #[garde(skip)]
+    #[serde(default)]
     pub learning_objectives: Vec<String>,
     #[garde(dive)]
     #[garde(length(min = 1))]

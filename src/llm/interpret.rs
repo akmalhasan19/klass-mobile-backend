@@ -1086,7 +1086,7 @@ mod tests {
 
     #[test]
     fn test_audit_payload_build() {
-        let payload = fallback("Buatkan materi");
+        let _payload = fallback("Buatkan materi");
 
         // Test build_audit_payload as a pure function by checking the structure
         // This tests the audit payload shape without needing DB repos

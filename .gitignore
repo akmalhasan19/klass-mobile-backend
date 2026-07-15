@@ -6,7 +6,9 @@ target/
 .env
 .env.local
 
-
+# Legacy PHP/Laravel artifacts (decommissioned)
+vendor/
+node_modules/
 
 # IDE
 .idea/

@@ -16,8 +16,8 @@ use super::response;
 
 // ─── Resources ───────────────────────────────────────────────────────────────
 
-#[derive(Serialize)]
-struct ContentResource {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct ContentResource {
     id: Uuid,
     topic_id: Uuid,
     #[serde(rename = "type")]
@@ -29,8 +29,8 @@ struct ContentResource {
     updated_at: Option<String>,
 }
 
-#[derive(Serialize)]
-struct MarketplaceTaskResource {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct MarketplaceTaskResource {
     id: Uuid,
     content_id: Uuid,
     status: String,
@@ -44,7 +44,7 @@ struct MarketplaceTaskResource {
 
 // ─── Query params ────────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema, utoipa::IntoParams)]
 pub struct MarketplaceTaskQueryParams {
     search: Option<String>,
     status: Option<String>,
@@ -56,6 +56,15 @@ pub struct MarketplaceTaskQueryParams {
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 /// GET /marketplace-tasks
+#[utoipa::path(
+    get,
+    path = "/api/v1/marketplace-tasks",
+    tag = "marketplace-tasks",
+    params(MarketplaceTaskQueryParams),
+    responses(
+        (status = 200, body = Vec<MarketplaceTaskResource>),
+    ),
+)]
 pub async fn index(
     State(state): State<AppState>,
     Query(params): Query<MarketplaceTaskQueryParams>,
@@ -87,6 +96,18 @@ pub async fn index(
 }
 
 /// GET /marketplace-tasks/{id}
+#[utoipa::path(
+    get,
+    path = "/api/v1/marketplace-tasks/{id}",
+    tag = "marketplace-tasks",
+    params(
+        ("id" = Uuid, Path, description = "Marketplace task ID"),
+    ),
+    responses(
+        (status = 200, body = MarketplaceTaskResource),
+        (status = 404, description = "Marketplace task not found"),
+    ),
+)]
 pub async fn show(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,

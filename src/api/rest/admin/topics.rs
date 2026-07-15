@@ -15,19 +15,19 @@ use super::super::response;
 
 // ─── Request bodies ──────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct UpdateTopicRequest {
     pub title: Option<String>,
     pub sub_subject_id: Option<Option<i64>>,
     pub thumbnail_url: Option<Option<String>>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct ReorderRequest {
     pub direction: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct PublishRequest {
     pub is_published: bool,
 }
@@ -35,6 +35,7 @@ pub struct PublishRequest {
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 /// PATCH /admin/topics/{id}
+#[utoipa::path(patch, path = "/api/v1/admin/topics/{id}", tag = "admin-topics", params(("id" = Uuid, Path)), request_body = UpdateTopicRequest, responses((status = 200, description = "Success")), security(("bearer_auth" = [])))]
 pub async fn update(
     State(state): State<AppState>,
     principal: Principal,
@@ -90,6 +91,7 @@ pub async fn update(
 }
 
 /// DELETE /admin/topics/{id}
+#[utoipa::path(delete, path = "/api/v1/admin/topics/{id}", tag = "admin-topics", params(("id" = Uuid, Path)), responses((status = 200, description = "Deleted", body = ())), security(("bearer_auth" = [])))]
 pub async fn delete(
     State(state): State<AppState>,
     principal: Principal,
@@ -132,6 +134,7 @@ pub async fn delete(
 /// Body: `{ "direction": "up" | "down" }`
 /// Swaps the topic's `order` with the adjacent topic in the given direction.
 /// Operations are performed inside a `BEGIN...SELECT FOR UPDATE...COMMIT` transaction.
+#[utoipa::path(patch, path = "/api/v1/admin/topics/{id}/reorder", tag = "admin-topics", params(("id" = Uuid, Path)), request_body = ReorderRequest, responses((status = 200, description = "Success")), security(("bearer_auth" = [])))]
 pub async fn reorder(
     State(state): State<AppState>,
     principal: Principal,
@@ -185,6 +188,7 @@ pub async fn reorder(
 ///
 /// Body: `{ "is_published": true | false }`
 /// Sets the topic's `is_published` flag to the given value (idempotent).
+#[utoipa::path(patch, path = "/api/v1/admin/topics/{id}/publish", tag = "admin-topics", params(("id" = Uuid, Path)), request_body = PublishRequest, responses((status = 200, description = "Success")), security(("bearer_auth" = [])))]
 pub async fn publish(
     State(state): State<AppState>,
     principal: Principal,

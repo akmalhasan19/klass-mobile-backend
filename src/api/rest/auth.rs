@@ -15,7 +15,7 @@ use super::response;
 
 // ─── Resources ───────────────────────────────────────────────────────────────
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct UserResource {
     pub id: i64,
     pub name: String,
@@ -38,48 +38,48 @@ impl From<User> for UserResource {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct AuthData {
     pub user: UserResource,
     pub token: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct TokenOnlyData {
     pub token: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct SecurityQuestionData {
     pub security_question: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct MessageData {
     pub message: String,
 }
 
 // ─── Requests ────────────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct RegisterRequest {
     pub name: String,
     pub email: String,
     pub password: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct GetSecurityQuestionRequest {
     pub email: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct VerifyAndResetPasswordRequest {
     pub email: String,
     pub security_answer: String,
@@ -89,6 +89,16 @@ pub struct VerifyAndResetPasswordRequest {
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 /// POST /auth/register
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/register",
+    tag = "auth",
+    request_body = RegisterRequest,
+    responses(
+        (status = 201, body = AuthData),
+        (status = 422, description = "Validation error"),
+    ),
+)]
 pub async fn register(
     State(state): State<AppState>,
     Json(body): Json<RegisterRequest>,
@@ -139,6 +149,16 @@ pub async fn register(
 }
 
 /// POST /auth/login
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/login",
+    tag = "auth",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, body = AuthData),
+        (status = 422, description = "Validation error"),
+    ),
+)]
 pub async fn login(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -188,6 +208,17 @@ pub async fn login(
 }
 
 /// POST /auth/logout
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/logout",
+    tag = "auth",
+    responses(
+        (status = 200, body = MessageData),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn logout(
     State(state): State<AppState>,
     principal: Principal,
@@ -215,6 +246,17 @@ pub async fn logout(
 }
 
 /// GET /auth/me
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/me",
+    tag = "auth",
+    responses(
+        (status = 200, body = UserResource),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn me(
     State(state): State<AppState>,
     principal: Principal,
@@ -230,6 +272,17 @@ pub async fn me(
 }
 
 /// POST /auth/refresh
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/refresh",
+    tag = "auth",
+    responses(
+        (status = 200, body = TokenOnlyData),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn refresh(
     State(state): State<AppState>,
     principal: Principal,
@@ -258,6 +311,16 @@ pub async fn refresh(
 }
 
 /// POST /auth/get-security-question
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/get-security-question",
+    tag = "auth",
+    request_body = GetSecurityQuestionRequest,
+    responses(
+        (status = 200, body = SecurityQuestionData),
+        (status = 422, description = "Validation error"),
+    ),
+)]
 pub async fn get_security_question(
     State(state): State<AppState>,
     Json(body): Json<GetSecurityQuestionRequest>,
@@ -283,6 +346,16 @@ pub async fn get_security_question(
 }
 
 /// POST /auth/verify-and-reset-password
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/verify-and-reset-password",
+    tag = "auth",
+    request_body = VerifyAndResetPasswordRequest,
+    responses(
+        (status = 200, body = MessageData),
+        (status = 422, description = "Validation error"),
+    ),
+)]
 pub async fn verify_and_reset_password(
     State(state): State<AppState>,
     Json(body): Json<VerifyAndResetPasswordRequest>,

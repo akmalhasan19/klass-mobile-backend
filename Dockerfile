@@ -63,9 +63,6 @@ RUN useradd --create-home --shell /bin/bash klass \
 # Copy binary only (plan: "copy binary only")
 COPY --from=builder /app/target/release/klass-gateway /usr/local/bin/klass-gateway
 
-# Copy static resources (path baked at compile time via CARGO_MANIFEST_DIR=/app)
-COPY resources/ /app/resources/
-
 USER klass
 WORKDIR /opt/klass
 

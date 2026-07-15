@@ -8,7 +8,7 @@
 //! - Compensation: uploaded file path tracking
 
 use klass_gateway::media_gen::publication::{
-    MediaPublicationService, PublicationError, SvgFallbackGenerator, ThumbnailGenerator,
+    PublicationError, SvgFallbackGenerator, ThumbnailGenerator,
 };
 
 // ═════════════════════════════════════════════════════════════════════════════

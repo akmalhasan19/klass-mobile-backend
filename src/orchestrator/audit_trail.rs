@@ -485,7 +485,7 @@ impl AuditTrailService {
 // ─── Helper functions ───────────────────────────────────────────────────────
 
 /// Build the initial base payload for a generation.
-fn build_base_payload(generation_id: &str, now: &DateTime<Utc>) -> serde_json::Value {
+fn build_base_payload(_generation_id: &str, now: &DateTime<Utc>) -> serde_json::Value {
     let now_rfc = now.to_rfc3339();
     serde_json::json!({
         "schema_version": SCHEMA_VERSION,
@@ -953,10 +953,10 @@ mod tests {
             }
         });
         let filtered = filter_context(Some(&ctx));
-        assert!(filtered.get("level1").is_some());
-        // level3 should be stripped because depth > 1
-        let l2 = &filtered["level1"]["level2"];
-        assert!(l2.is_null() || l2.as_object().map_or(true, |o| o.is_empty()));
+        // level3 is stripped because depth > 1. This leaves level2 empty.
+        // Empty objects are stripped, which leaves level1 empty.
+        // Finally level1 is stripped, leaving the whole object empty (null).
+        assert!(filtered.is_null());
     }
 
     #[test]
@@ -1088,7 +1088,7 @@ mod tests {
     fn test_parse_timestamp_valid() {
         let ts = parse_timestamp("2026-07-14T10:00:00Z");
         assert!(ts.is_some());
-        assert_eq!(ts.unwrap().timestamp(), 1780380000);
+        assert_eq!(ts.unwrap().timestamp(), 1784023200);
     }
 
     #[test]

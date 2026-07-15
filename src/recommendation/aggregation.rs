@@ -109,20 +109,20 @@ pub struct TopicItemInput {
 }
 
 /// Taxonomy info for a topic/subject.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct TaxonomyInfo {
     pub subject: Option<SubjectTaxonomy>,
     pub sub_subject: SubSubjectTaxonomy,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct SubjectTaxonomy {
     pub id: i64,
     pub name: String,
     pub slug: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct SubSubjectTaxonomy {
     pub id: i64,
     pub subject_id: i64,
@@ -241,7 +241,7 @@ pub struct SourceStatusInfo {
     pub suppressed_count: Option<usize>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct PersonalizationSummary {
     #[serde(skip_serializing_if = "is_false")]
     pub applied: bool,

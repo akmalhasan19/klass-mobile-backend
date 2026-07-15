@@ -789,11 +789,11 @@ mod tests {
     fn sample_interpretation() -> Value {
         serde_json::json!({
             "schema_version": "media_prompt_understanding.v1",
-            "teacher_prompt": "Buatkan handout aljabar untuk kelas 8 dengan contoh singkat.",
+            "teacher_prompt": "Buatkan materi aljabar untuk kelas 8 dengan contoh singkat.",
             "language": "id",
             "teacher_intent": {
                 "type": "generate_learning_media",
-                "goal": "Create a printable classroom handout.",
+                "goal": "Create a classroom resource.",
                 "preferred_delivery_mode": "digital_download",
                 "requires_clarification": false
             },
@@ -810,9 +810,9 @@ mod tests {
                 { "type": "docx", "score": 0.61, "reason": "Masih cocok jika guru ingin mengedit." },
                 { "type": "pptx", "score": 0.22, "reason": "Slide deck tidak menjadi kebutuhan utama." }
             ],
-            "resolved_output_type_reasoning": "PDF paling sesuai untuk handout yang ingin tampil konsisten.",
+            "resolved_output_type_reasoning": "Sesuai untuk materi yang ingin tampil konsisten.",
             "document_blueprint": {
-                "title": "Handout Aljabar Kelas 8",
+                "title": "Materi Aljabar Kelas 8",
                 "summary": "Ringkasan singkat aljabar dasar dengan latihan cepat.",
                 "sections": [{
                     "title": "Konsep Dasar",
@@ -826,12 +826,12 @@ mod tests {
             "target_audience": { "label": "Siswa kelas 8", "level": "middle_school", "age_range": "13-14" },
             "requested_media_characteristics": {
                 "tone": "supportive",
-                "format_preferences": ["printable"],
+                "format_preferences": [],
                 "visual_density": "medium"
             },
             "assets": [],
             "assessment_or_activity_blocks": [],
-            "teacher_delivery_summary": "Gunakan handout ini untuk pembuka sebelum latihan mandiri.",
+            "teacher_delivery_summary": "Gunakan materi ini untuk pembuka sebelum latihan mandiri.",
             "confidence": { "score": 0.88, "label": "high", "rationale": "Prompt cukup jelas." },
             "fallback": { "triggered": false, "reason_code": null, "action": null }
         })
@@ -946,6 +946,11 @@ mod tests {
         let mut interp = sample_interpretation();
         interp["teacher_prompt"] =
             Value::String("Buatkan slide presentasi untuk materi pecahan.".to_string());
+        interp["output_type_candidates"] = serde_json::json!([
+            { "type": "pdf", "score": 0.50, "reason": "Printable." },
+            { "type": "pptx", "score": 0.45, "reason": "Slide relevan." },
+            { "type": "docx", "score": 0.30, "reason": "Editable." },
+        ]);
 
         let input = DecideInput {
             interpretation: interp,
@@ -1127,8 +1132,8 @@ mod tests {
     fn test_decision_haystack_includes_prompt_and_goal() {
         let interp = sample_interpretation();
         let haystack = decision_haystack(&interp);
-        assert!(haystack.contains("buatkan handout aljabar"));
-        assert!(haystack.contains("create a printable classroom handout"));
+        assert!(haystack.contains("buatkan materi aljabar"));
+        assert!(haystack.contains("create a classroom resource"));
     }
 
     // ── build_ranking_reasoning ────────────────────────────────────────────

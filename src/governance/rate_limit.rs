@@ -471,7 +471,7 @@ pub async fn preflight_check(
             "hour" => WindowUnit::Hour,
             _ => WindowUnit::Day,
         };
-        let ws = window_start(now, unit);
+        let _ws = window_start(now, unit);
 
         // Build a zero-increment mutation — we just want to check limits
         let check_mutation = BucketMutation {

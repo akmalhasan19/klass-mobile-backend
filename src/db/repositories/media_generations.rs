@@ -154,6 +154,32 @@ pub struct UpdatePayloadsPayload {
     pub error_message: Option<String>,
 }
 
+// ─── Admin listing types ───────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Default)]
+pub struct AdminMediaGenerationFilters {
+    pub status: Option<String>,
+    pub search: Option<String>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct MediaGenerationAdminRow {
+    pub id: Uuid,
+    pub generated_from_id: Option<Uuid>,
+    pub is_regeneration: bool,
+    pub teacher_id: i64,
+    pub raw_prompt: String,
+    pub preferred_output_type: String,
+    pub resolved_output_type: Option<String>,
+    pub status: String,
+    pub error_code: Option<String>,
+    pub error_message: Option<String>,
+    pub created_at: Option<chrono::NaiveDateTime>,
+    pub updated_at: Option<chrono::NaiveDateTime>,
+    pub teacher_name: String,
+    pub teacher_email: String,
+}
+
 // ─── Column list ──────────────────────────────────────────────────────────────
 
 const MG_SELECT_COLS: &str = r#"
@@ -216,7 +242,7 @@ impl PgMediaGenerationsRepo {
 
 impl PgMediaGenerationsRepo {
     /// Fetch a single row by id (unscoped). Used internally.
-    async fn find_raw(&self, id: Uuid) -> anyhow::Result<MediaGeneration> {
+    pub async fn find_raw(&self, id: Uuid) -> anyhow::Result<MediaGeneration> {
         let sql = format!(
             r#"SELECT {MG_SELECT_COLS} FROM media_generations WHERE id = $1"#,
         );
@@ -226,6 +252,73 @@ impl PgMediaGenerationsRepo {
             .await
             .map_err(|e| anyhow::anyhow!("failed to fetch media generation: {e}"))?
             .ok_or_else(|| anyhow::anyhow!("media generation not found"))
+    }
+}
+
+impl PgMediaGenerationsRepo {
+    /// Fetch paginated media generations for the admin listing.
+    ///
+    /// Supports filtering by `status` (exact match) and `search`
+    /// (ILIKE against `id::text`, `raw_prompt`, teacher `name`, teacher `email`).
+    /// Includes teacher name/email via JOIN with `users`.
+    pub async fn find_all_admin(
+        &self,
+        filters: &AdminMediaGenerationFilters,
+        pagination: &crate::db::pagination::PaginationQuery,
+    ) -> anyhow::Result<(Vec<MediaGenerationAdminRow>, i64)> {
+        let search_pattern = filters
+            .search
+            .as_ref()
+            .filter(|s| !s.is_empty())
+            .map(|s| format!("%{}%", s));
+
+        let count_sql = r#"
+            SELECT COUNT(*)
+            FROM media_generations mg
+            LEFT JOIN users u ON mg.teacher_id = u.id
+            WHERE ($1::text IS NULL OR mg.status = $1)
+              AND ($2::text IS NULL OR
+                   mg.id::text ILIKE $2 OR
+                   mg.raw_prompt ILIKE $2 OR
+                   u.name ILIKE $2 OR
+                   u.email ILIKE $2)
+        "#;
+
+        let total: i64 = sqlx::query_scalar(count_sql)
+            .bind(filters.status.as_deref())
+            .bind(search_pattern.as_deref())
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to count media generations: {e}"))?;
+
+        let data_sql = r#"
+            SELECT mg.id, mg.generated_from_id, mg.is_regeneration, mg.teacher_id,
+                   mg.raw_prompt, mg.preferred_output_type, mg.resolved_output_type,
+                   mg.status, mg.error_code, mg.error_message,
+                   mg.created_at, mg.updated_at,
+                   u.name AS teacher_name, u.email AS teacher_email
+            FROM media_generations mg
+            LEFT JOIN users u ON mg.teacher_id = u.id
+            WHERE ($1::text IS NULL OR mg.status = $1)
+              AND ($2::text IS NULL OR
+                   mg.id::text ILIKE $2 OR
+                   mg.raw_prompt ILIKE $2 OR
+                   u.name ILIKE $2 OR
+                   u.email ILIKE $2)
+            ORDER BY mg.created_at DESC
+            LIMIT $3 OFFSET $4
+        "#;
+
+        let rows: Vec<MediaGenerationAdminRow> = sqlx::query_as(&data_sql)
+            .bind(filters.status.as_deref())
+            .bind(search_pattern.as_deref())
+            .bind(pagination.limit())
+            .bind(pagination.offset())
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to fetch media generations: {e}"))?;
+
+        Ok((rows, total))
     }
 }
 
@@ -337,16 +430,17 @@ impl MediaGenerationsRepo for PgMediaGenerationsRepo {
         let sql = format!(
             r#"
             INSERT INTO media_generations
-                (teacher_id, raw_prompt, request_fingerprint,
+                (id, teacher_id, raw_prompt, request_fingerprint,
                  generated_from_id, is_regeneration,
                  subject_id, sub_subject_id,
                  preferred_output_type, active_duplicate_key)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING {MG_SELECT_COLS}
             "#,
         );
 
         let generation = sqlx::query_as::<_, MediaGeneration>(&sql)
+            .bind(Uuid::new_v4())
             .bind(payload.teacher_id)
             .bind(&payload.raw_prompt)
             .bind(&payload.request_fingerprint)
@@ -639,6 +733,7 @@ async fn fetch_recommended_projects(
 /// Build the dynamic SET clause parts for `update_payloads`.
 fn build_payload_set(payload: &UpdatePayloadsPayload) -> Vec<String> {
     let mut parts = Vec::new();
+    #[allow(unused_assignments)]
     let mut idx = 1u32;
 
     macro_rules! add_col {

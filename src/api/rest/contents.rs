@@ -18,8 +18,8 @@ use super::response;
 
 // ─── Resources ───────────────────────────────────────────────────────────────
 
-#[derive(Serialize)]
-struct MarketplaceTaskResource {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct MarketplaceTaskResource {
     id: Uuid,
     content_id: Uuid,
     status: String,
@@ -29,8 +29,8 @@ struct MarketplaceTaskResource {
     updated_at: Option<String>,
 }
 
-#[derive(Serialize)]
-struct TopicResource {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct TopicResource {
     id: Uuid,
     title: String,
     teacher_id: String,
@@ -44,8 +44,8 @@ struct TopicResource {
     updated_at: Option<String>,
 }
 
-#[derive(Serialize)]
-struct ContentResource {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct ContentResource {
     id: Uuid,
     topic_id: Uuid,
     #[serde(rename = "type")]
@@ -63,7 +63,7 @@ struct ContentResource {
 
 // ─── Query params ────────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema, utoipa::IntoParams)]
 pub struct ContentQueryParams {
     search: Option<String>,
     topic_id: Option<Uuid>,
@@ -76,6 +76,15 @@ pub struct ContentQueryParams {
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 /// GET /contents
+#[utoipa::path(
+    get,
+    path = "/api/v1/contents",
+    tag = "contents",
+    params(ContentQueryParams),
+    responses(
+        (status = 200, body = Vec<ContentResource>),
+    ),
+)]
 pub async fn index(
     State(state): State<AppState>,
     Query(params): Query<ContentQueryParams>,
@@ -119,6 +128,18 @@ pub async fn index(
 }
 
 /// GET /contents/{id}
+#[utoipa::path(
+    get,
+    path = "/api/v1/contents/{id}",
+    tag = "contents",
+    params(
+        ("id" = Uuid, Path, description = "Content ID"),
+    ),
+    responses(
+        (status = 200, body = ContentResource),
+        (status = 404, description = "Content not found"),
+    ),
+)]
 pub async fn show(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,

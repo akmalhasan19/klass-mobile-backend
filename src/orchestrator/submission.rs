@@ -141,6 +141,7 @@ impl SubmissionService {
         let insert_result = sqlx::query_scalar::<_, Uuid>(
             r#"
             INSERT INTO media_generations (
+                id,
                 teacher_id,
                 subject_id,
                 sub_subject_id,
@@ -154,12 +155,13 @@ impl SubmissionService {
                 generator_provider,
                 generator_model
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, 'queued',
-                $8, $9, $10, $11
+                $1, $2, $3, $4, $5, $6, $7, $8, 'queued',
+                $9, $10, $11, $12
             )
             RETURNING id
             "#,
         )
+        .bind(Uuid::new_v4())
         .bind(input.teacher_id)
         .bind(input.subject_id)
         .bind(input.sub_subject_id)
@@ -300,6 +302,7 @@ impl SubmissionService {
         let new_id = sqlx::query_scalar::<_, Uuid>(
             r#"
             INSERT INTO media_generations (
+                id,
                 teacher_id,
                 generated_from_id,
                 is_regeneration,
@@ -312,6 +315,7 @@ impl SubmissionService {
                 status
             )
             SELECT
+                $8,
                 teacher_id,
                 $1,
                 TRUE,
@@ -334,6 +338,7 @@ impl SubmissionService {
         .bind(&regeneration_fingerprint)
         .bind(Some(&regeneration_fingerprint))
         .bind(&normalized_type)
+        .bind(Uuid::new_v4())
         .fetch_one(&self.pool)
         .await
         .map_err(SubmissionError::Database)?;

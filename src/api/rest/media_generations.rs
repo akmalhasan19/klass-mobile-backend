@@ -29,7 +29,7 @@ fn require_teacher(principal: &Principal) -> Result<(), AppError> {
 
 // ─── Request bodies ───────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateMediaGenerationRequest {
     pub raw_prompt: String,
     pub preferred_output_type: Option<String>,
@@ -37,26 +37,26 @@ pub struct CreateMediaGenerationRequest {
     pub sub_subject_id: Option<i64>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct MediaGenerationQueryParams {
     pub parent_id: Option<Uuid>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct RegenerateRequest {
     pub additional_prompt: String,
 }
 
 // ─── Resource ─────────────────────────────────────────────────────────────────
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct SubjectResource {
     pub id: i64,
     pub name: String,
     pub slug: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct SubSubjectResource {
     pub id: i64,
     pub subject_id: i64,
@@ -65,7 +65,7 @@ pub struct SubSubjectResource {
     pub subject: Option<SubjectResource>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct TopicResource {
     pub id: Uuid,
     pub title: String,
@@ -74,7 +74,7 @@ pub struct TopicResource {
     pub is_published: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct ContentResource {
     pub id: Uuid,
     pub topic_id: Uuid,
@@ -85,7 +85,7 @@ pub struct ContentResource {
     pub is_published: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct RecommendedProjectResource {
     pub id: i64,
     pub title: String,
@@ -95,7 +95,7 @@ pub struct RecommendedProjectResource {
     pub is_active: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct MediaGenerationResource {
     pub id: Uuid,
     pub status: String,
@@ -118,12 +118,12 @@ pub struct MediaGenerationResource {
     pub recommended_project: Option<RecommendedProjectResource>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct MediaGenerationListResponse {
     pub generations: Vec<MediaGenerationResource>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct MediaGenerationChainResource {
     pub ancestors: Vec<MediaGenerationResource>,
     pub children: Vec<MediaGenerationResource>,
@@ -132,6 +132,19 @@ pub struct MediaGenerationChainResource {
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
 /// POST /media-generations
+#[utoipa::path(
+    post,
+    path = "/api/v1/media-generations",
+    tag = "media-generations",
+    request_body = CreateMediaGenerationRequest,
+    responses(
+        (status = 202, body = MediaGenerationResource),
+        (status = 422, description = "Validation error"),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn create(
     State(state): State<AppState>,
     principal: Principal,
@@ -182,6 +195,20 @@ pub async fn create(
 }
 
 /// GET /media-generations?parent_id=
+#[utoipa::path(
+    get,
+    path = "/api/v1/media-generations",
+    tag = "media-generations",
+    params(
+        ("parent_id" = Option<Uuid>, Query, description = "Parent generation ID"),
+    ),
+    responses(
+        (status = 200, body = MediaGenerationListResponse),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn index(
     State(state): State<AppState>,
     principal: Principal,
@@ -224,6 +251,21 @@ pub async fn index(
 }
 
 /// GET /media-generations/{id}
+#[utoipa::path(
+    get,
+    path = "/api/v1/media-generations/{id}",
+    tag = "media-generations",
+    params(
+        ("id" = Uuid, Path, description = "Media generation ID"),
+    ),
+    responses(
+        (status = 200, body = MediaGenerationResource),
+        (status = 404, description = "Media generation not found"),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn show(
     State(state): State<AppState>,
     principal: Principal,
@@ -247,6 +289,21 @@ pub async fn show(
 }
 
 /// POST /media-generations/{id}/regenerate
+#[utoipa::path(
+    post,
+    path = "/api/v1/media-generations/{id}/regenerate",
+    tag = "media-generations",
+    params(
+        ("id" = Uuid, Path, description = "Media generation ID"),
+    ),
+    request_body = RegenerateRequest,
+    responses(
+        (status = 202, body = MediaGenerationResource),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn regenerate(
     State(state): State<AppState>,
     principal: Principal,

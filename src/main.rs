@@ -3,6 +3,8 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use axum::{routing::get, Router};
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
@@ -14,7 +16,7 @@ use klass_gateway::config::AppConfig;
 use klass_gateway::media_gen::publication::MediaPublicationService;
 use klass_gateway::media_gen::python_client::PythonMediaGeneratorClient;
 use klass_gateway::orchestrator::workflow::{
-    ComposeStep, DraftStep, GenerateStep, InterpretStep, PublishStep, WorkflowError,
+    ComposeStep, DraftStep, InterpretStep, WorkflowError,
 };
 use klass_gateway::queue::worker::{Worker, CONSUMER_PREFIX};
 use klass_gateway::state::AppState;
@@ -33,8 +35,17 @@ async fn main() -> anyhow::Result<()> {
 
     let args: Vec<String> = std::env::args().collect();
     let is_worker = args.iter().any(|a| a == "--worker");
+    let smoke_llm = args.iter().any(|a| a == "--smoke-llm");
+    let smoke_python = args.iter().any(|a| a == "--smoke-python");
 
     let config = AppConfig::from_env()?;
+
+    if smoke_llm {
+        return klass_gateway::smoke::smoke_llm(&config).await;
+    }
+    if smoke_python {
+        return klass_gateway::smoke::smoke_python(&config).await;
+    }
 
     if is_worker {
         run_worker(config).await
@@ -57,9 +68,13 @@ async fn run_server(config: AppConfig) -> anyhow::Result<()> {
 
     let cors = build_cors_layer(&config.cors_allowed_origins);
 
-    let app = Router::new()
+    let swagger: Router<AppState> = SwaggerUi::new("/api-docs/swagger-ui/{_:.*}")
+        .url("/api-docs/openapi.json", api::openapi::ApiDoc::openapi())
+        .into();
+
+    let app = api::rest::api_router()
         .route("/health", get(health_check))
-        .nest("/api/v1", api::rest::api_router())
+        .merge(swagger)
         .with_state(state)
         .layer(
             tower::ServiceBuilder::new()

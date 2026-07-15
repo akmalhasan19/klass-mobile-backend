@@ -18,8 +18,8 @@ use super::super::response;
 
 // ─── Resource ────────────────────────────────────────────────────────────────
 
-#[derive(Serialize)]
-struct ActivityLogResource {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct ActivityLogResource {
     id: Uuid,
     actor_id: Option<i64>,
     action: String,
@@ -32,7 +32,7 @@ struct ActivityLogResource {
 
 // ─── Query params ────────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema, utoipa::IntoParams)]
 pub struct ActivityLogQueryParams {
     /// Exact match on `action` column.
     pub action: Option<String>,
@@ -65,6 +65,7 @@ pub struct ActivityLogQueryParams {
 /// All mutations (create, update, delete, publish, reorder, upload, etc.)
 /// are recorded via `record_activity()` in their respective handlers, and
 /// this endpoint allows admins to browse/search through them.
+#[utoipa::path(get, path = "/api/v1/admin/activity-logs", tag = "admin-activity-logs", params(ActivityLogQueryParams), responses((status = 200, description = "Success", body = [ActivityLogResource])), security(("bearer_auth" = [])))]
 pub async fn index(
     State(state): State<AppState>,
     principal: Principal,
@@ -139,13 +140,9 @@ fn build_resource(log: crate::governance::activity_log::ActivityLog) -> Activity
         subject_type: log.subject_type,
         subject_id: log.subject_id,
         metadata: log.metadata,
-        created_at: format_datetime(log.created_at),
-        updated_at: format_datetime(log.updated_at),
+        created_at: log.created_at.map(|d| d.and_utc().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)).unwrap_or_default(),
+        updated_at: log.updated_at.map(|d| d.and_utc().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)).unwrap_or_default(),
     }
 }
 
-// ─── Formatting helpers ──────────────────────────────────────────────────────
 
-fn format_datetime(dt: DateTime<Utc>) -> String {
-    dt.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
-}

@@ -14,8 +14,8 @@ pub struct User {
     pub remember_token: Option<String>,
     pub security_question: Option<String>,
     pub security_answer: Option<String>,
-    pub created_at: chrono::NaiveDateTime,
-    pub updated_at: chrono::NaiveDateTime,
+    pub created_at: Option<chrono::NaiveDateTime>,
+    pub updated_at: Option<chrono::NaiveDateTime>,
 }
 
 #[derive(Debug)]

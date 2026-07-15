@@ -23,7 +23,7 @@ const VALID_TASK_TYPES: &[&str] = &["bid", "suggestion"];
 
 // ─── Request bodies ──────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateMarketplaceTaskRequest {
     pub content_id: Uuid,
     pub status: Option<String>,
@@ -35,7 +35,7 @@ pub struct CreateMarketplaceTaskRequest {
     pub media_generation_id: Option<Uuid>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct UpdateMarketplaceTaskRequest {
     pub content_id: Option<Uuid>,
     pub task_type: Option<String>,
@@ -46,7 +46,7 @@ pub struct UpdateMarketplaceTaskRequest {
     pub media_generation_id: Option<Option<Uuid>>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct UpdateStatusRequest {
     pub status: String,
 }
@@ -54,6 +54,7 @@ pub struct UpdateStatusRequest {
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 /// POST /admin/marketplace-tasks
+#[utoipa::path(post, path = "/api/v1/admin/marketplace-tasks", tag = "admin-marketplace-tasks", request_body = CreateMarketplaceTaskRequest, responses((status = 201, description = "Created")), security(("bearer_auth" = [])))]
 pub async fn create(
     State(state): State<AppState>,
     principal: Principal,
@@ -132,6 +133,7 @@ pub async fn create(
 }
 
 /// PATCH /admin/marketplace-tasks/{id}
+#[utoipa::path(patch, path = "/api/v1/admin/marketplace-tasks/{id}", tag = "admin-marketplace-tasks", params(("id" = Uuid, Path)), request_body = UpdateMarketplaceTaskRequest, responses((status = 200, description = "Success")), security(("bearer_auth" = [])))]
 pub async fn update(
     State(state): State<AppState>,
     principal: Principal,
@@ -207,6 +209,7 @@ pub async fn update(
 }
 
 /// DELETE /admin/marketplace-tasks/{id}
+#[utoipa::path(delete, path = "/api/v1/admin/marketplace-tasks/{id}", tag = "admin-marketplace-tasks", params(("id" = Uuid, Path)), responses((status = 200, description = "Deleted", body = ())), security(("bearer_auth" = [])))]
 pub async fn delete(
     State(state): State<AppState>,
     principal: Principal,
@@ -249,6 +252,7 @@ pub async fn delete(
 /// Body: `{ "status": "open" | "taken" | "done" }`
 /// Updates only the status field of a marketplace task.
 /// Writes `update_task_status` activity log.
+#[utoipa::path(patch, path = "/api/v1/admin/marketplace-tasks/{id}/status", tag = "admin-marketplace-tasks", params(("id" = Uuid, Path)), request_body = UpdateStatusRequest, responses((status = 200, description = "Success")), security(("bearer_auth" = [])))]
 pub async fn update_status(
     State(state): State<AppState>,
     principal: Principal,

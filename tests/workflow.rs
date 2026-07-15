@@ -16,7 +16,6 @@ use serde_json::Value;
 
 use klass_gateway::orchestrator::workflow::{
     ComposeStep, DraftStep, GenerateStep, InterpretStep, PublishStep, WorkflowError,
-    WorkflowService,
 };
 
 // ═════════════════════════════════════════════════════════════════════════════

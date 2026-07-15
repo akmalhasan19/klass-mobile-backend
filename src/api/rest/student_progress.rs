@@ -15,8 +15,8 @@ use super::response;
 
 // ─── Resources ───────────────────────────────────────────────────────────────
 
-#[derive(Serialize)]
-struct StudentProgressResource {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct StudentProgressResource {
     id: Uuid,
     student_name: String,
     score: Option<i32>,
@@ -27,7 +27,7 @@ struct StudentProgressResource {
 
 // ─── Query params ────────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema, utoipa::IntoParams)]
 pub struct StudentProgressQueryParams {
     search: Option<String>,
     page: Option<i64>,
@@ -37,6 +37,15 @@ pub struct StudentProgressQueryParams {
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 /// GET /student-progress
+#[utoipa::path(
+    get,
+    path = "/api/v1/student-progress",
+    tag = "student-progress",
+    params(StudentProgressQueryParams),
+    responses(
+        (status = 200, body = Vec<StudentProgressResource>),
+    ),
+)]
 pub async fn index(
     State(state): State<AppState>,
     Query(params): Query<StudentProgressQueryParams>,
@@ -66,6 +75,18 @@ pub async fn index(
 }
 
 /// GET /student-progress/{id}
+#[utoipa::path(
+    get,
+    path = "/api/v1/student-progress/{id}",
+    tag = "student-progress",
+    params(
+        ("id" = Uuid, Path, description = "Student progress ID"),
+    ),
+    responses(
+        (status = 200, body = StudentProgressResource),
+        (status = 404, description = "Student progress not found"),
+    ),
+)]
 pub async fn show(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -93,14 +114,10 @@ fn build_student_progress_resource(record: StudentProgress) -> StudentProgressRe
         id: record.id,
         student_name: record.student_name,
         score: record.score,
-        completion_date: record.completion_date.map(format_datetime),
-        created_at: format_datetime(record.created_at),
-        updated_at: format_datetime(record.updated_at),
+        completion_date: record.completion_date.map(|d| d.and_utc().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
+        created_at: record.created_at.map(|d| d.and_utc().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)).unwrap_or_default(),
+        updated_at: record.updated_at.map(|d| d.and_utc().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)).unwrap_or_default(),
     }
 }
 
-// ─── Formatting helpers ──────────────────────────────────────────────────────
 
-fn format_datetime(dt: chrono::DateTime<chrono::Utc>) -> String {
-    dt.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
-}

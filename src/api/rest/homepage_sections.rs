@@ -12,8 +12,8 @@ use crate::state::AppState;
 
 // ─── Resources ───────────────────────────────────────────────────────────────
 
-#[derive(Serialize)]
-struct HomepageSectionResource {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct HomepageSectionResource {
     id: Uuid,
     key: String,
     label: String,
@@ -27,6 +27,14 @@ struct HomepageSectionResource {
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 /// GET /homepage-sections
+#[utoipa::path(
+    get,
+    path = "/api/v1/homepage-sections",
+    tag = "homepage-sections",
+    responses(
+        (status = 200, body = Vec<HomepageSectionResource>),
+    ),
+)]
 pub async fn index(
     State(state): State<AppState>,
 ) -> AppResult<(StatusCode, Json<serde_json::Value>)> {

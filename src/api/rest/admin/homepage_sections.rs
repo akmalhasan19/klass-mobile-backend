@@ -17,14 +17,14 @@ use super::super::response;
 
 // ─── Request body ────────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct BulkUpdateSection {
     pub id: Uuid,
     pub position: i32,
     pub is_enabled: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct BulkUpdateHomepageSectionsRequest {
     pub sections: Vec<BulkUpdateSection>,
 }
@@ -40,6 +40,7 @@ pub struct BulkUpdateHomepageSectionsRequest {
 ///
 /// Returns the number of updated rows and the current state of all sections
 /// (so the admin can verify the result immediately).
+#[utoipa::path(patch, path = "/api/v1/admin/homepage-sections", tag = "admin-homepage-sections", request_body = BulkUpdateHomepageSectionsRequest, responses((status = 200, description = "Success")), security(("bearer_auth" = [])))]
 pub async fn bulk_update(
     State(state): State<AppState>,
     principal: Principal,

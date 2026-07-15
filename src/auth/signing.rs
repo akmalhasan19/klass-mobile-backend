@@ -65,8 +65,8 @@ mod tests {
 
     #[test]
     fn test_signature_determinism() {
-        let signer = InterServiceRequestSigner::new("test-secret".to_string());
-        let generation_id = "550e8400-e29b-41d4-a716-446655440000";
+        let _signer = InterServiceRequestSigner::new("test-secret".to_string());
+        let _generation_id = "550e8400-e29b-41d4-a716-446655440000";
         let payload = br#"{"test":"data"}"#;
 
         let sig1 = {
