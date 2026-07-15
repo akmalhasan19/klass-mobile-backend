@@ -366,12 +366,17 @@ impl MediaPublicationService {
         .fetch_one(&mut *tx)
         .await?;
 
+        let preview_url = response
+            .pointer("/artifact_metadata/preview_url")
+            .and_then(|v| v.as_str());
+
         // ── 10. Update generation row ───────────────────────────────────
         let delivery_payload = build_delivery_payload(
             &r2_result.public_url,
             thumbnail_url.as_deref(),
             output_type,
             mime_type,
+            preview_url,
         );
 
         sqlx::query(
@@ -531,6 +536,7 @@ fn build_delivery_payload(
     thumbnail_url: Option<&str>,
     output_type: &str,
     mime_type: &str,
+    preview_url: Option<&str>,
 ) -> Value {
     serde_json::json!({
         "schema_version": "media_delivery_response.v1",
@@ -549,6 +555,7 @@ fn build_delivery_payload(
             "thumbnail_url": thumbnail_url,
             "output_type": output_type,
             "mime_type": mime_type,
+            "preview_url": preview_url,
         },
     })
 }
@@ -646,6 +653,7 @@ mod tests {
             Some("https://cdn.example.com/materials/thumb.svg"),
             "pdf",
             "application/pdf",
+            Some("https://example.com/preview.html"),
         );
         assert_eq!(payload["schema_version"], "media_delivery_response.v1");
         assert_eq!(payload["response_meta"]["provider"], "python-renderer");
@@ -659,7 +667,7 @@ mod tests {
 
     #[test]
     fn test_build_delivery_payload_no_thumbnail() {
-        let payload = build_delivery_payload("https://cdn.example.com/materials/slides.pptx", None, "pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+        let payload = build_delivery_payload("https://cdn.example.com/materials/slides.pptx", None, "pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation", None);
         assert!(payload["artifact"]["thumbnail_url"].is_null());
     }
 

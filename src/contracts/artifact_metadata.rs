@@ -44,6 +44,14 @@ pub struct ArtifactMetadata {
     #[garde(skip)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generator_model: Option<String>,
+    /// Signed URL for the self-contained HTML preview (Jinja2/Chromium render,
+    /// pasca-migrasi dari Marp). Diisi oleh Python renderer pada `artifact_metadata.preview_url`
+    /// untuk artifact slide-based (pptx/pdf). Diteruskan ke Flutter via
+    /// `ArtifactInfo.preview_url` (field 6) di `media_generation.proto`.
+    /// Opsional — tidak semua output format menghasilkan preview.
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_url: Option<String>,
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────
@@ -102,6 +110,7 @@ pub fn fallback(filename: &str, mime_type: &str) -> ArtifactMetadata {
         features: vec![],
         generator_provider: None,
         generator_model: None,
+        preview_url: None,
     }
 }
 
@@ -163,5 +172,43 @@ mod tests {
     fn test_decode_empty_returns_error() {
         let result = decode_and_validate("");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decode_captures_preview_url() {
+        // Verifies the gateway forwards the preview signed URL produced by the
+        // Python renderer (artifact_metadata.preview_url) instead of dropping it.
+        let json = r#"{
+            "schema_version": "media_artifact_metadata.v1",
+            "filename": "materi-pecahan.pdf",
+            "mime_type": "application/pdf",
+            "size_bytes": 204800,
+            "checksum_sha256": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            "output_type": "pdf",
+            "preview_url": "https://storage.example.com/preview/materi-pecahan.html?sig=abc"
+        }"#;
+        let result = decode_and_validate(json);
+        assert!(result.is_ok(), "decode failed: {:?}", result.err());
+        let meta = result.unwrap();
+        assert_eq!(
+            meta.preview_url.as_deref(),
+            Some("https://storage.example.com/preview/materi-pecahan.html?sig=abc")
+        );
+    }
+
+    #[test]
+    fn test_decode_preview_url_optional() {
+        // preview_url is optional — absence must not break decoding.
+        let json = r#"{
+            "schema_version": "media_artifact_metadata.v1",
+            "filename": "slide-deck.pptx",
+            "mime_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "size_bytes": 512000,
+            "checksum_sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+            "output_type": "pptx"
+        }"#;
+        let result = decode_and_validate(json);
+        assert!(result.is_ok(), "decode failed: {:?}", result.err());
+        assert!(result.unwrap().preview_url.is_none());
     }
 }
