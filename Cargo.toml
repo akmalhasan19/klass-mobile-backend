@@ -67,7 +67,7 @@ aws-config = { version = "1.5", features = ["behavior-version-latest"] }
 uuid = { version = "1.11", features = ["v4", "serde"] }
 garde = { version = "0.20", features = ["derive"] }
 utoipa = { version = "5.0", features = ["axum_extras", "chrono", "uuid"] }
-utoipa-swagger-ui = { version = "9.0", features = ["axum"] }
+utoipa-swagger-ui = { version = "9.0", features = ["axum", "reqwest"] }
 rust_decimal = { version = "1.36", features = ["serde"] }
 blake2 = "0.10"
 redis = { version = "0.27", features = ["tokio-comp", "streams"] }
