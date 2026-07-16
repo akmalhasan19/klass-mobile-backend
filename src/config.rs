@@ -37,7 +37,6 @@ pub struct AppConfig {
 
     pub cors_allowed_origins: String,
 
-    pub sanctum_hash_algo: String,
 
     #[serde(default)]
     pub recommendations: RecommendationsConfig,
@@ -114,7 +113,6 @@ impl AppConfig {
             .set_default("hmac_max_age_seconds", 300)?
             .set_default("rust_log", "info")?
             .set_default("log_format", "json")?
-            .set_default("sanctum_hash_algo", "sha256")?
             .set_default("cors_allowed_origins", "")?
             .set_default("openrouter_model", "deepseek/deepseek-v4-flash")?
             .set_default("openrouter_base_url", "https://openrouter.ai/api/v1")?
