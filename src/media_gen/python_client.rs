@@ -46,8 +46,14 @@ use crate::orchestrator::workflow::{GenerateStep, WorkflowError};
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-/// Endpoint path on the Python renderer.
+/// Endpoint path on the Python renderer (sync, legacy).
 const GENERATE_PATH: &str = "/v1/generate";
+
+/// Async job submission endpoint on the Python renderer (fire-and-forget, Task 1.4.4).
+const JOBS_PATH: &str = "/v1/jobs";
+
+/// Webhook callback path on the Rust Gateway (where Python sends completion updates).
+const WEBHOOK_PATH: &str = "/internal/media-generations/webhook";
 
 /// Error codes matching the plan: sent to the orchestration audit trail.
 const ERROR_PYTHON_SERVICE_UNAVAILABLE: &str = "PYTHON_SERVICE_UNAVAILABLE";
@@ -109,6 +115,7 @@ pub struct PythonMediaGeneratorClient {
     pool: PgPool,
     http: HttpClient,
     base_url: String,
+    webhook_base_url: String,
     signer: InterServiceRequestSigner,
     timeout: Duration,
     retry_attempts: u32,
@@ -124,6 +131,7 @@ impl PythonMediaGeneratorClient {
             pool,
             http,
             base_url: config.media_gen_url.trim_end_matches('/').to_string(),
+            webhook_base_url: config.webhook_base_url.trim_end_matches('/').to_string(),
             signer,
             timeout: Duration::from_secs_f64(python_cfg.timeout_seconds.max(1.0)),
             retry_attempts: python_cfg.retry_attempts.max(1),
@@ -136,6 +144,7 @@ impl PythonMediaGeneratorClient {
         pool: PgPool,
         http: HttpClient,
         base_url: &str,
+        webhook_base_url: &str,
         hmac_secret: &str,
         timeout: Duration,
         retry_attempts: u32,
@@ -146,6 +155,7 @@ impl PythonMediaGeneratorClient {
             pool,
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
+            webhook_base_url: webhook_base_url.trim_end_matches('/').to_string(),
             signer,
             timeout,
             retry_attempts: retry_attempts.max(1),
@@ -333,13 +343,83 @@ impl PythonMediaGeneratorClient {
     }
 }
 
+// ─── Fire-and-Forget: Submit job to Python async endpoint (Task 1.4.4) ───────
+
+impl PythonMediaGeneratorClient {
+    /// Submit a generation job to the Python renderer's async endpoint.
+    ///
+    /// This is the fire-and-forget method used by the new async workflow.
+    /// It POSTs to `POST /v1/jobs` with the generation spec and a webhook URL.
+    /// The Python Arq worker processes the job asynchronously and sends a
+    /// webhook back to the Rust Gateway when completed or failed.
+    ///
+    /// Returns `Ok(())` on HTTP 202 Accepted — the job has been queued.
+    ///
+    /// Enhanced with observability (Sub-task 3.2.3):
+    /// - `#[tracing::instrument]` for structured tracing span on job submission
+    #[tracing::instrument(
+        name = "generation.submit_job",
+        skip(self),
+        fields(generation_id = %generation_id, job_id = %job_id)
+    )]
+    pub async fn submit_job(&self, generation_id: &str, job_id: &str) -> Result<(), PythonClientError> {
+        let gen_id = Uuid::parse_str(generation_id)
+            .map_err(|e| PythonClientError::InvalidUuid(e.to_string()))?;
+
+        // Step 1: Load the generation spec from DB
+        let spec_value = self.load_spec(gen_id).await?;
+
+        // Step 2: Build the fire-and-forget job request body
+        let webhook_url = format!("{}{}", self.webhook_base_url, WEBHOOK_PATH);
+        let body = build_job_request_body(generation_id, job_id, &spec_value, &webhook_url);
+
+        // Step 3: POST to Python renderer's async endpoint with HMAC signing
+        let url = format!("{}{}", self.base_url, JOBS_PATH);
+        let body_bytes = serde_json::to_vec(&body)?;
+        let signed = self.signer.build(generation_id, &body_bytes);
+
+        let response = self
+            .http
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("X-Request-Id", &signed.request_id)
+            .header("X-Klass-Generation-Id", &signed.generation_id)
+            .header("X-Klass-Request-Timestamp", &signed.timestamp)
+            .header("X-Klass-Signature-Algorithm", &signed.signature_algorithm)
+            .header("X-Klass-Signature", &signed.signature)
+            .body(body_bytes)
+            .timeout(self.timeout)
+            .send()
+            .await
+            .map_err(PythonClientError::Http)?;
+
+        let status = response.status();
+        let body_value: Value = response.json().await.map_err(PythonClientError::Http)?;
+
+        if status == reqwest::StatusCode::ACCEPTED || status.is_success() {
+            // Fire-and-forget: job accepted, return immediately
+            Ok(())
+        } else {
+            let error_code = map_error_code(status.as_u16(), &body_value);
+            let error_message = extract_error_message(&body_value);
+            Err(PythonClientError::RendererError {
+                code: error_code,
+                message: error_message,
+                status: status.as_u16(),
+                raw_body: body_value,
+            })
+        }
+    }
+}
+
 // ─── GenerateStep trait impl for workflow integration ───────────────────────
 
 #[async_trait]
 impl GenerateStep for PythonMediaGeneratorClient {
-    async fn generate(&self, generation_id: &str) -> Result<Value, WorkflowError> {
-        let result = PythonMediaGeneratorClient::generate(self, generation_id).await?;
-        Ok(result.raw_response)
+    async fn submit_job(&self, generation_id: &str, job_id: &str) -> Result<(), WorkflowError> {
+        PythonMediaGeneratorClient::submit_job(self, generation_id, job_id)
+            .await
+            .map_err(WorkflowError::from)
     }
 }
 
@@ -364,6 +444,24 @@ fn build_request_body(generation_id: &str, generation_spec: &Value) -> Value {
             "generation_spec": "media_generation_spec.v1",
             "artifact_metadata": "media_artifact_metadata.v1",
         }
+    })
+}
+
+/// Build the request body for the async job submission endpoint (`POST /v1/jobs`).
+///
+/// Includes the `webhook_url` so the Python Arq worker knows where to send
+/// the completion callback.
+fn build_job_request_body(
+    generation_id: &str,
+    job_id: &str,
+    generation_spec: &Value,
+    webhook_url: &str,
+) -> Value {
+    serde_json::json!({
+        "generation_id": generation_id,
+        "job_id": job_id,
+        "generation_spec": generation_spec,
+        "webhook_url": webhook_url,
     })
 }
 

@@ -33,6 +33,11 @@ use utoipa::Modify;
         crate::api::rest::media_generations::index,
         crate::api::rest::media_generations::show,
         crate::api::rest::media_generations::regenerate,
+        crate::api::rest::media_generations::job_status,
+        // NOTE: `POST /internal/media-generations/webhook`
+        // (crate::api::rest::media_webhook::webhook_handler) is intentionally
+        // EXCLUDED from the public OpenAPI docs — it is an internal, HMAC-signed
+        // endpoint used only by the Python Arq worker to report job completion.
         // Freelancer
         crate::api::rest::freelancer::suggest_freelancers,
         crate::api::rest::freelancer::hire_freelancer,
@@ -149,6 +154,9 @@ use utoipa::Modify;
             crate::api::rest::media_generations::CreateMediaGenerationRequest,
             crate::api::rest::media_generations::MediaGenerationQueryParams,
             crate::api::rest::media_generations::RegenerateRequest,
+            // Async job tracking (Task 1.3)
+            crate::api::rest::media_generations::CreateMediaGenerationResponse,
+            crate::api::rest::media_generations::JobStatusResponse,
             // Freelancer
             crate::api::rest::freelancer::FreelancerMatchResource,
             crate::api::rest::freelancer::HiredFreelancerResource,

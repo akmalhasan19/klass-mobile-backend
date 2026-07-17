@@ -12,10 +12,10 @@ pub struct PersonalAccessToken {
     pub name: String,
     pub token: String,
     pub abilities: Option<String>,
-    pub last_used_at: Option<chrono::NaiveDateTime>,
-    pub expires_at: Option<chrono::NaiveDateTime>,
-    pub created_at: chrono::NaiveDateTime,
-    pub updated_at: chrono::NaiveDateTime,
+    pub last_used_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Generate a random 64-character hex string using two UUID v4s.

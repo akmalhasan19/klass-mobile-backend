@@ -95,7 +95,10 @@ async fn test_queue_enqueue_and_read() {
     queue.create_consumer_group().await.unwrap();
 
     // Enqueue a job
-    let entry_id = queue.enqueue("gen-integration-1", 1).await.unwrap();
+    let entry_id = queue
+        .enqueue("gen-integration-1", "job-integration-1", 1)
+        .await
+        .unwrap();
     assert!(!entry_id.is_empty(), "entry ID must not be empty");
 
     // Verify the stream has the entry

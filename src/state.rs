@@ -36,7 +36,6 @@ impl AppState {
 
         let http = reqwest::Client::builder()
             .use_rustls_tls()
-            .http2_prior_knowledge()
             .gzip(true)
             .connect_timeout(std::time::Duration::from_secs(10))
             .timeout(std::time::Duration::from_secs(90))

@@ -98,6 +98,13 @@ async fn seed_match_data(pool: &PgPool) -> MatchSeed {
         mime_type: None,
         error_code: None,
         error_message: None,
+        generation_job_id: None,
+        generation_status: None,
+        s3_object_key: None,
+        presigned_download_url: None,
+        presigned_url_expires_at: None,
+        generation_error_code: None,
+        generation_error_message: None,
         created_at: None,
         updated_at: None,
     };

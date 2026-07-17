@@ -136,6 +136,7 @@ impl Worker {
                     let result = wf
                         .process(
                             &entry.generation_id,
+                            entry.job_id.as_deref(),
                             Some(entry.attempt as i32),
                             Some(job_context),
                             &*interpret,
@@ -233,13 +234,17 @@ impl Worker {
                                     .query_async(&mut *conn)
                                     .await;
 
-                                // Re-enqueue with incremented attempt
+                                // Re-enqueue with incremented attempt, preserving job_id
                                 let now = chrono::Utc::now().to_rfc3339();
-                                let _: Result<(), _> = redis::cmd("XADD")
-                                    .arg(&stream)
+                                let mut cmd = redis::cmd("XADD");
+                                cmd.arg(&stream)
                                     .arg("*")
                                     .arg("generation_id")
-                                    .arg(&entry.generation_id)
+                                    .arg(&entry.generation_id);
+                                if let Some(ref job_id) = entry.job_id {
+                                    cmd.arg("job_id").arg(job_id);
+                                }
+                                let _: Result<(), _> = cmd
                                     .arg("attempt")
                                     .arg(new_attempt.to_string())
                                     .arg("enqueued_at")
@@ -360,18 +365,24 @@ impl Worker {
                     .get("generation_id")
                     .cloned()
                     .unwrap_or_default();
+                let job_id = fields
+                    .get("job_id")
+                    .filter(|v| !v.is_empty())
+                    .cloned();
                 let attempt: i64 = fields
                     .get("attempt")
                     .and_then(|v| v.parse().ok())
                     .unwrap_or(1);
                 let payload = serde_json::json!({
                     "generation_id": generation_id,
+                    "job_id": job_id,
                     "attempt": attempt,
                     "entry_id": entry_id,
                 });
                 entries.push(StreamEntry {
                     id: entry_id,
                     generation_id,
+                    job_id,
                     attempt,
                     payload,
                 });
@@ -458,6 +469,9 @@ fn value_to_str(v: &redis::Value) -> Option<String> {
 pub struct StreamEntry {
     pub id: String,
     pub generation_id: String,
+    /// Async job ID for webhook-based completion tracking (Task 1.4).
+    /// `None` for legacy entries enqueued before job tracking was added.
+    pub job_id: Option<String>,
     pub attempt: i64,
     pub payload: Value,
 }
@@ -492,10 +506,12 @@ mod tests {
         let entry = StreamEntry {
             id: "1234567890-0".to_string(),
             generation_id: "gen-1".to_string(),
+            job_id: Some("job-1".to_string()),
             attempt: 1,
-            payload: serde_json::json!({"generation_id": "gen-1", "attempt": 1}),
+            payload: serde_json::json!({"generation_id": "gen-1", "job_id": "job-1", "attempt": 1}),
         };
         assert_eq!(entry.generation_id, "gen-1");
+        assert_eq!(entry.job_id.as_deref(), Some("job-1"));
         assert_eq!(entry.attempt, 1);
         assert!(!entry.id.is_empty());
     }

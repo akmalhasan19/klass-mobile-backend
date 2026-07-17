@@ -1,0 +1,327 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# E2E Integration Test Stack
+#
+# Starts all services required for the async media generation happy path:
+#   1. PostgreSQL 17   — application database
+#   2. Redis 7         — job queue (Arq) + Redis Streams (gateway)
+#   3. MinIO           — S3/R2-compatible object storage
+#   4. Rust Gateway    — REST API server + worker (--worker)
+#   5. Python API      — FastAPI media generator (POST /v1/jobs)
+#   6. Python Worker   — Arq background worker
+#
+# Usage:
+#   docker compose -f docker-compose.e2e.yml up --build --abort-on-container-exit
+#
+# The init-minio service auto-creates the required bucket on startup.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+services:
+  # ── PostgreSQL 17 ──────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:17-alpine
+    container_name: klass-e2e-postgres
+    environment:
+      POSTGRES_DB: klass_backend
+      POSTGRES_USER: klass
+      POSTGRES_PASSWORD: klass_dev
+    ports:
+      # Host 5433 avoids clashing with a local PostgreSQL on 5432
+      - "5433:5432"
+    volumes:
+      - e2e_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U klass -d klass_backend"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Redis 7 ────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: klass-e2e-redis
+    ports:
+      # Host 6380 avoids clashing with a local Redis on 6379
+      - "6380:6379"
+    volumes:
+      - e2e_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # ── MinIO (R2/S3-compatible) ───────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: klass-e2e-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: klass_minio
+      MINIO_ROOT_PASSWORD: klass_minio_dev
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console
+    volumes:
+      - e2e_minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── MinIO init: create bucket ──────────────────────────────────────────────
+  init-minio:
+    image: minio/mc:latest
+    container_name: klass-e2e-init-minio
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "
+        mc alias set local http://minio:9000 klass_minio klass_minio_dev &&
+        mc mb --ignore-existing local/klass-media &&
+        mc anonymous set download local/klass-media &&
+        echo '✅ Bucket klass-media created'
+      "
+    restart: "no"
+
+  # ── Run DB migrations ─────────────────────────────────────────────────────
+  migrate-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: klass-e2e-migrate-gateway
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://klass:klass_dev@postgres:5432/klass_backend
+      SQLX_OFFLINE: "true"
+    volumes:
+      - .:/app
+      - cargo_cache_server:/usr/local/cargo/registry
+      - target_cache:/app/target
+    working_dir: /app
+    command: >
+      sh -c "
+        echo '⏳ Running gateway migrations...' &&
+        cargo install sqlx-cli --no-default-features --features postgres 2>/dev/null || true &&
+        sqlx migrate run --source migrations &&
+        echo '✅ Gateway migrations complete'
+      "
+    restart: "no"
+
+  # ── Run Python migrations ──────────────────────────────────────────────────
+  migrate-python:
+    build:
+      context: ../media-generator-service
+      dockerfile: Dockerfile
+    container_name: klass-e2e-migrate-python
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://klass:klass_dev@postgres:5432/klass_backend
+    volumes:
+      - ../media-generator-service:/app
+    working_dir: /app
+    entrypoint: >
+      sh -c "
+        echo '⏳ Python migrations not needed (schema managed by gateway)'
+      "
+    restart: "no"
+
+  # ── Rust Gateway — REST API Server ────────────────────────────────────────
+  rust-gateway-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: klass-e2e-gateway-server
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://klass:klass_dev@postgres:5432/klass_backend
+      REDIS_URL: redis://redis:6379
+      RUST_LOG: info,klass_gateway=debug
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      GRPC_PORT: "50051"
+      # R2 / MinIO config
+      R2_ENDPOINT: http://minio:9000
+      R2_ACCESS_KEY_ID: klass_minio
+      R2_SECRET_ACCESS_KEY: klass_minio_dev
+      R2_BUCKET_NAME: klass-media
+      R2_PUBLIC_URL: http://minio:9000/klass-media
+      # Python Media Gen
+      # HMAC for Rust→Python request signing AND Python→Rust webhook signing must match.
+      MEDIA_GEN_URL: http://python-api:7860
+      MEDIA_GEN_HMAC_SECRET: test-hmac-shared-secret-e2e
+      MEDIA_GEN_WEBHOOK_SECRET: test-hmac-shared-secret-e2e
+      WEBHOOK_BASE_URL: http://rust-gateway-server:8080
+      # LLM — pass OPENROUTER_API_KEY from host env / .env for real happy-path runs
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-sk-placeholder}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-tencent/hy3:free}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_ADAPTER_FALLBACK_URL: ""
+      HMAC_SECRET: test-hmac-shared-secret-e2e
+      CORS_ALLOWED_ORIGINS: "*"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate-gateway:
+        condition: service_completed_successfully
+      init-minio:
+        condition: service_completed_successfully
+    volumes:
+      - .:/app
+      - cargo_cache_server:/usr/local/cargo/registry
+      - target_cache:/app/target
+    working_dir: /app
+    command: cargo watch -x "run"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 36
+      start_period: 120s
+    restart: unless-stopped
+
+  # ── Rust Gateway — Worker (processes Redis Stream jobs) ────────────────────
+  rust-gateway-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: klass-e2e-gateway-worker
+    environment:
+      DATABASE_URL: postgres://klass:klass_dev@postgres:5432/klass_backend
+      REDIS_URL: redis://redis:6379
+      RUST_LOG: info,klass_gateway=debug
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      GRPC_PORT: "50051"
+      R2_ENDPOINT: http://minio:9000
+      R2_ACCESS_KEY_ID: klass_minio
+      R2_SECRET_ACCESS_KEY: klass_minio_dev
+      R2_BUCKET_NAME: klass-media
+      R2_PUBLIC_URL: http://minio:9000/klass-media
+      MEDIA_GEN_URL: http://python-api:7860
+      MEDIA_GEN_HMAC_SECRET: test-hmac-shared-secret-e2e
+      MEDIA_GEN_WEBHOOK_SECRET: test-hmac-shared-secret-e2e
+      WEBHOOK_BASE_URL: http://rust-gateway-server:8080
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-sk-placeholder}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-tencent/hy3:free}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_ADAPTER_FALLBACK_URL: ""
+      HMAC_SECRET: test-hmac-shared-secret-e2e
+      CORS_ALLOWED_ORIGINS: "*"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate-gateway:
+        condition: service_completed_successfully
+      init-minio:
+        condition: service_completed_successfully
+      rust-gateway-server:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - cargo_cache_worker:/usr/local/cargo/registry
+      - target_cache_worker:/app/target
+    working_dir: /app
+    command: cargo watch -x "run -- --worker"
+    restart: unless-stopped
+
+  # ── Python Media Generator — FastAPI API ───────────────────────────────────
+  python-api:
+    build:
+      context: ../media-generator-service
+      dockerfile: Dockerfile
+    container_name: klass-e2e-python-api
+    ports:
+      - "7860:7860"
+    environment:
+      # Auth
+      MEDIA_GENERATION_PYTHON_SHARED_SECRET: test-hmac-shared-secret-e2e
+      MEDIA_GENERATION_PYTHON_REQUEST_MAX_AGE_SECONDS: "300"
+      # Redis (Arq queue)
+      MEDIA_GENERATION_PYTHON_REDIS_URL: redis://redis:6379/1
+      # S3 / MinIO
+      MEDIA_GENERATION_PYTHON_R2_ENDPOINT: http://minio:9000
+      MEDIA_GENERATION_PYTHON_R2_ACCESS_KEY_ID: klass_minio
+      MEDIA_GENERATION_PYTHON_R2_SECRET_ACCESS_KEY: klass_minio_dev
+      MEDIA_GENERATION_PYTHON_R2_BUCKET_NAME: klass-media
+      MEDIA_GENERATION_PYTHON_R2_PUBLIC_URL: http://minio:9000/klass-media
+      # Worker config
+      MEDIA_GENERATION_PYTHON_WORKER_CONCURRENCY: "2"
+      MEDIA_GENERATION_PYTHON_WORKER_JOB_TIMEOUT_SECONDS: "120"
+      # Logging
+      MEDIA_GENERATION_PYTHON_LOG_LEVEL: debug
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      init-minio:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 40s
+    restart: unless-stopped
+
+  # ── Python Media Generator — Arq Worker ────────────────────────────────────
+  python-worker:
+    build:
+      context: ../media-generator-service
+      dockerfile: Dockerfile
+    container_name: klass-e2e-python-worker
+    environment:
+      # Auth
+      MEDIA_GENERATION_PYTHON_SHARED_SECRET: test-hmac-shared-secret-e2e
+      # Redis (Arq queue)
+      MEDIA_GENERATION_PYTHON_REDIS_URL: redis://redis:6379/1
+      # S3 / MinIO
+      MEDIA_GENERATION_PYTHON_R2_ENDPOINT: http://minio:9000
+      MEDIA_GENERATION_PYTHON_R2_ACCESS_KEY_ID: klass_minio
+      MEDIA_GENERATION_PYTHON_R2_SECRET_ACCESS_KEY: klass_minio_dev
+      MEDIA_GENERATION_PYTHON_R2_BUCKET_NAME: klass-media
+      MEDIA_GENERATION_PYTHON_R2_PUBLIC_URL: http://minio:9000/klass-media
+      # Worker config
+      MEDIA_GENERATION_PYTHON_WORKER_CONCURRENCY: "2"
+      MEDIA_GENERATION_PYTHON_WORKER_JOB_TIMEOUT_SECONDS: "120"
+      # Logging
+      MEDIA_GENERATION_PYTHON_LOG_LEVEL: debug
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      python-api:
+        condition: service_healthy
+      init-minio:
+        condition: service_completed_successfully
+    working_dir: /app
+    command: ["python", "-m", "app.worker_entrypoint"]
+    restart: unless-stopped
+
+volumes:
+  e2e_postgres_data:
+  e2e_redis_data:
+  e2e_minio_data:
+  cargo_cache_server:
+  cargo_cache_worker:
+  target_cache:
+  target_cache_worker:

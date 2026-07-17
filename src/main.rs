@@ -2,7 +2,8 @@ use std::sync::Arc;
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use axum::{routing::get, Router};
+use axum::routing::{get, post};
+use axum::Router;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 use tower_http::compression::CompressionLayer;
@@ -68,12 +69,20 @@ async fn run_server(config: AppConfig) -> anyhow::Result<()> {
 
     let cors = build_cors_layer(&config.cors_allowed_origins);
 
-    let swagger: Router<AppState> = SwaggerUi::new("/api-docs/swagger-ui/{_:.*}")
+    let swagger: Router<AppState> = SwaggerUi::new("/api-docs/swagger-ui")
         .url("/api-docs/openapi.json", api::openapi::ApiDoc::openapi())
         .into();
 
+    // Internal routes (not exposed in public API docs)
+    let internal_routes = Router::new()
+        .route(
+            "/media-generations/webhook",
+            post(api::rest::media_webhook::webhook_handler),
+        );
+
     let app = api::rest::api_router()
         .route("/health", get(health_check))
+        .nest("/internal", internal_routes)
         .merge(swagger)
         .with_state(state)
         .layer(

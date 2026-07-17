@@ -207,6 +207,7 @@ mod tests {
             r2_public_url: String::new(),
             media_gen_url: String::new(),
             media_gen_hmac_secret: String::new(),
+            media_gen_webhook_secret: String::new(),
             openrouter_api_key: String::new(),
             openrouter_model: String::new(),
             openrouter_base_url: String::new(),
@@ -235,7 +236,6 @@ mod tests {
             rust_log: "info".to_string(),
             log_format: "json".to_string(),
             cors_allowed_origins: String::new(),
-            sanctum_hash_algo: "sha256".to_string(),
             recommendations: crate::config::RecommendationsConfig::default(),
         };
         assert!(FallbackProviderConfig::from_app_config(&config).is_none());
@@ -325,6 +325,7 @@ mod tests {
             r2_public_url: String::new(),
             media_gen_url: String::new(),
             media_gen_hmac_secret: String::new(),
+            media_gen_webhook_secret: String::new(),
             openrouter_api_key: String::new(),
             openrouter_model: String::new(),
             openrouter_base_url: String::new(),
@@ -354,7 +355,6 @@ mod tests {
             rust_log: "info".to_string(),
             log_format: "json".to_string(),
             cors_allowed_origins: String::new(),
-            sanctum_hash_algo: "sha256".to_string(),
             recommendations: crate::config::RecommendationsConfig::default(),
         };
         assert!(!FallbackProviderClient::is_configured(&config));

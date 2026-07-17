@@ -332,6 +332,7 @@ mod tests {
             r2_public_url: String::new(),
             media_gen_url: String::new(),
             media_gen_hmac_secret: String::new(),
+            media_gen_webhook_secret: String::new(),
             llm_adapter_fallback_url: String::new(),
             media_generation: crate::config::MediaGenerationConfig {
                 interpreter: crate::config::ServiceTimeoutsConfig {
@@ -359,7 +360,6 @@ mod tests {
             rust_log: "info".to_string(),
             log_format: "json".to_string(),
             cors_allowed_origins: String::new(),
-            sanctum_hash_algo: "sha256".to_string(),
             recommendations: crate::config::RecommendationsConfig::default(),
         };
         let or_config = OpenRouterConfig::from_app_config(&config);

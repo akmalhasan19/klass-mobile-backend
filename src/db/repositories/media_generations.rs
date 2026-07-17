@@ -38,8 +38,16 @@ pub struct MediaGeneration {
     pub mime_type: Option<String>,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
-    pub created_at: Option<chrono::NaiveDateTime>,
-    pub updated_at: Option<chrono::NaiveDateTime>,
+    // -- Async media generation job tracking (Task 1.1 / Task 1.2) --
+    pub generation_job_id: Option<Uuid>,
+    pub generation_status: Option<String>,
+    pub s3_object_key: Option<String>,
+    pub presigned_download_url: Option<String>,
+    pub presigned_url_expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub generation_error_code: Option<String>,
+    pub generation_error_message: Option<String>,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 // ─── Summary structs for eager-loaded relations ───────────────────────────────
@@ -154,6 +162,27 @@ pub struct UpdatePayloadsPayload {
     pub error_message: Option<String>,
 }
 
+// ─── Async media generation job payloads (Task 1.2) ───────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct UpdateGenerationJobStatusPayload {
+    pub generation_job_id: Option<Uuid>,
+    pub generation_status: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateS3MetadataPayload {
+    pub s3_object_key: String,
+    pub presigned_download_url: String,
+    pub presigned_url_expires_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateGenerationErrorPayload {
+    pub generation_error_code: String,
+    pub generation_error_message: String,
+}
+
 // ─── Admin listing types ───────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Default)]
@@ -174,8 +203,8 @@ pub struct MediaGenerationAdminRow {
     pub status: String,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
-    pub created_at: Option<chrono::NaiveDateTime>,
-    pub updated_at: Option<chrono::NaiveDateTime>,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
     pub teacher_name: String,
     pub teacher_email: String,
 }
@@ -192,7 +221,11 @@ const MG_SELECT_COLS: &str = r#"
     generation_spec_payload, decision_payload,
     orchestration_audit_payload, delivery_payload,
     generator_service_response, storage_path, file_url, thumbnail_url,
-    mime_type, error_code, error_message, created_at, updated_at
+    mime_type, error_code, error_message,
+    generation_job_id, generation_status, s3_object_key,
+    presigned_download_url, presigned_url_expires_at,
+    generation_error_code, generation_error_message,
+    created_at, updated_at
 "#;
 
 // ─── Trait ────────────────────────────────────────────────────────────────────
@@ -226,6 +259,32 @@ pub trait MediaGenerationsRepo: Send + Sync {
 
     /// Update multiple payload/result fields at once. Returns the updated row.
     async fn update_payloads(&self, id: Uuid, payload: &UpdatePayloadsPayload) -> anyhow::Result<MediaGeneration>;
+
+    // ─── Async media generation job tracking (Task 1.2) ───────────────────────
+
+    /// Update `generation_job_id` and `generation_status` for a generation.
+    async fn update_generation_job_status(
+        &self,
+        id: Uuid,
+        payload: &UpdateGenerationJobStatusPayload,
+    ) -> anyhow::Result<MediaGeneration>;
+
+    /// Find a generation by its `generation_job_id`.
+    async fn find_by_job_id(&self, job_id: Uuid) -> anyhow::Result<Option<MediaGeneration>>;
+
+    /// Update S3 metadata fields: `s3_object_key`, `presigned_download_url`, `presigned_url_expires_at`.
+    async fn update_s3_metadata(
+        &self,
+        id: Uuid,
+        payload: &UpdateS3MetadataPayload,
+    ) -> anyhow::Result<MediaGeneration>;
+
+    /// Update generation error fields: `generation_error_code`, `generation_error_message`.
+    async fn update_generation_error(
+        &self,
+        id: Uuid,
+        payload: &UpdateGenerationErrorPayload,
+    ) -> anyhow::Result<MediaGeneration>;
 }
 
 // ─── Pg implementation ────────────────────────────────────────────────────────
@@ -559,6 +618,109 @@ impl MediaGenerationsRepo for PgMediaGenerationsRepo {
 
         generation.ok_or_else(|| anyhow::anyhow!("media generation not found"))
     }
+
+    // ─── Async media generation job tracking (Task 1.2) ───────────────────────
+
+    async fn update_generation_job_status(
+        &self,
+        id: Uuid,
+        payload: &UpdateGenerationJobStatusPayload,
+    ) -> anyhow::Result<MediaGeneration> {
+        let sql = format!(
+            r#"
+            UPDATE media_generations
+            SET generation_job_id = $2,
+                generation_status = $3,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING {MG_SELECT_COLS}
+            "#,
+        );
+
+        let generation = sqlx::query_as::<_, MediaGeneration>(&sql)
+            .bind(id)
+            .bind(payload.generation_job_id)
+            .bind(&payload.generation_status)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!("failed to update generation job status for {id}: {e}")
+            })?;
+
+        generation.ok_or_else(|| anyhow::anyhow!("media generation {id} not found"))
+    }
+
+    async fn find_by_job_id(&self, job_id: Uuid) -> anyhow::Result<Option<MediaGeneration>> {
+        let sql = format!(
+            r#"SELECT {MG_SELECT_COLS}
+               FROM media_generations
+               WHERE generation_job_id = $1"#,
+        );
+
+        let generation = sqlx::query_as::<_, MediaGeneration>(&sql)
+            .bind(job_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to find media generation by job_id {job_id}: {e}"))?;
+
+        Ok(generation)
+    }
+
+    async fn update_s3_metadata(
+        &self,
+        id: Uuid,
+        payload: &UpdateS3MetadataPayload,
+    ) -> anyhow::Result<MediaGeneration> {
+        let sql = format!(
+            r#"
+            UPDATE media_generations
+            SET s3_object_key = $2,
+                presigned_download_url = $3,
+                presigned_url_expires_at = $4,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING {MG_SELECT_COLS}
+            "#,
+        );
+
+        let generation = sqlx::query_as::<_, MediaGeneration>(&sql)
+            .bind(id)
+            .bind(&payload.s3_object_key)
+            .bind(&payload.presigned_download_url)
+            .bind(payload.presigned_url_expires_at)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to update S3 metadata for {id}: {e}"))?;
+
+        generation.ok_or_else(|| anyhow::anyhow!("media generation {id} not found"))
+    }
+
+    async fn update_generation_error(
+        &self,
+        id: Uuid,
+        payload: &UpdateGenerationErrorPayload,
+    ) -> anyhow::Result<MediaGeneration> {
+        let sql = format!(
+            r#"
+            UPDATE media_generations
+            SET generation_error_code = $2,
+                generation_error_message = $3,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING {MG_SELECT_COLS}
+            "#,
+        );
+
+        let generation = sqlx::query_as::<_, MediaGeneration>(&sql)
+            .bind(id)
+            .bind(&payload.generation_error_code)
+            .bind(&payload.generation_error_message)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to update generation error for {id}: {e}"))?;
+
+        generation.ok_or_else(|| anyhow::anyhow!("media generation {id} not found"))
+    }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -808,6 +970,13 @@ mod tests {
             mime_type: None,
             error_code: None,
             error_message: None,
+            generation_job_id: None,
+            generation_status: None,
+            s3_object_key: None,
+            presigned_download_url: None,
+            presigned_url_expires_at: None,
+            generation_error_code: None,
+            generation_error_message: None,
             created_at: None,
             updated_at: None,
         };
@@ -965,6 +1134,13 @@ mod tests {
             mime_type: None,
             error_code: None,
             error_message: None,
+            generation_job_id: None,
+            generation_status: None,
+            s3_object_key: None,
+            presigned_download_url: None,
+            presigned_url_expires_at: None,
+            generation_error_code: None,
+            generation_error_message: None,
             created_at: None,
             updated_at: None,
         };
@@ -1023,6 +1199,13 @@ mod tests {
             mime_type: None,
             error_code: None,
             error_message: None,
+            generation_job_id: None,
+            generation_status: None,
+            s3_object_key: None,
+            presigned_download_url: None,
+            presigned_url_expires_at: None,
+            generation_error_code: None,
+            generation_error_message: None,
             created_at: None,
             updated_at: None,
         };

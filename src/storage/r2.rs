@@ -1,5 +1,6 @@
+use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::Client as S3Client;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 // ─── Upload Categories (ported from `config/filesystems.php`) ────────────────
@@ -132,6 +133,29 @@ pub struct UploadResult {
 /// Build a public URL from the base URL and object path.
 pub fn generate_public_url(public_url_base: &str, path: &str) -> String {
     format!("{}/{}", public_url_base.trim_end_matches('/'), path)
+}
+
+// ─── Presigned URL ───────────────────────────────────────────────────────────
+
+/// Generate a presigned URL for downloading an object from R2.
+pub async fn generate_presigned_url(
+    s3_client: &S3Client,
+    bucket: &str,
+    path: &str,
+    expires_in: Duration,
+) -> anyhow::Result<String> {
+    let presigning_config = PresigningConfig::expires_in(expires_in)
+        .map_err(|e| anyhow::anyhow!("failed to build presigning config: {e}"))?;
+
+    let presigned_request = s3_client
+        .get_object()
+        .bucket(bucket)
+        .key(path)
+        .presigned(presigning_config)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to generate presigned URL for '{path}': {e}"))?;
+
+    Ok(presigned_request.uri().to_string())
 }
 
 // ─── Upload ──────────────────────────────────────────────────────────────────

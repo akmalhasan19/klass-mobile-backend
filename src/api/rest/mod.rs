@@ -8,6 +8,7 @@ pub mod homepage_recommendations;
 pub mod homepage_sections;
 pub mod marketplace_tasks;
 pub mod media_generations;
+pub mod media_webhook;
 pub mod response;
 pub mod student_progress;
 pub mod topics;
@@ -47,6 +48,7 @@ pub fn api_router() -> Router<AppState> {
 
     let media_generation_routes = Router::new()
         .route("/", get(media_generations::index).post(media_generations::create))
+        .route("/{id}/job-status", get(media_generations::job_status))
         .route("/{id}", get(media_generations::show))
         .route("/{id}/regenerate", post(media_generations::regenerate))
         .route("/{id}/suggest-freelancers", post(freelancer::suggest_freelancers))

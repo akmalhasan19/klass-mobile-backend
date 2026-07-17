@@ -20,6 +20,8 @@ pub struct AppConfig {
 
     pub media_gen_url: String,
     pub media_gen_hmac_secret: String,
+    pub media_gen_webhook_secret: String,
+    pub webhook_base_url: String,
 
     pub openrouter_api_key: String,
     pub openrouter_model: String,

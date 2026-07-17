@@ -105,19 +105,9 @@ struct MockGenerate {
 
 #[async_trait]
 impl GenerateStep for MockGenerate {
-    async fn generate(&self, _generation_id: &str) -> Result<Value, WorkflowError> {
+    async fn submit_job(&self, _generation_id: &str, _job_id: &str) -> Result<(), WorkflowError> {
         self.counts.fetch_add(1, Ordering::SeqCst);
-        Ok(serde_json::json!({
-            "status": "generated",
-            "artifact_metadata": {
-                "schema_version": "media_artifact_metadata.v1",
-                "filename": "output.pdf",
-                "mime_type": "application/pdf",
-                "size_bytes": 102400,
-                "checksum_sha256": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-                "output_type": "pdf"
-            }
-        }))
+        Ok(())
     }
 }
 
@@ -176,7 +166,7 @@ fn test_mock_steps_track_invocations() {
     rt.block_on(async {
         interpret.interpret("gen-1").await.unwrap();
         draft.draft("gen-1").await.unwrap();
-        generate.generate("gen-1").await.unwrap();
+        generate.submit_job("gen-1", "job-1").await.unwrap();
         publish.publish("gen-1").await.unwrap();
         compose.compose("gen-1").await.unwrap();
     });

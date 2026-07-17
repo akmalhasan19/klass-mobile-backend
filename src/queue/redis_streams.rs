@@ -60,7 +60,8 @@ impl QueueService {
             .await
             .map_err(|e| QueueError::Redis(e.to_string()))?;
 
-        let result: Result<(), _> = redis::cmd("XGROUP CREATE")
+        let result: Result<(), _> = redis::cmd("XGROUP")
+            .arg("CREATE")
             .arg(&[&self.stream, &self.group, "$", "MKSTREAM"])
             .query_async(&mut *conn)
             .await;
@@ -79,11 +80,12 @@ impl QueueService {
 
     /// Enqueue a generation job into the Redis stream.
     ///
-    /// Calls `XADD klass:media-gen * generation_id <id> attempt <n> enqueued_at <now>`.
+    /// Calls `XADD klass:media-gen * generation_id <id> job_id <job_id> attempt <n> enqueued_at <now>`.
     /// Returns the auto-generated Redis entry ID (e.g. `"1234567890-0"`).
     pub async fn enqueue(
         &self,
         generation_id: &str,
+        job_id: &str,
         attempt: i64,
     ) -> Result<String, QueueError> {
         let mut conn = self
@@ -99,6 +101,8 @@ impl QueueService {
             .arg("*")
             .arg("generation_id")
             .arg(generation_id)
+            .arg("job_id")
+            .arg(job_id)
             .arg("attempt")
             .arg(attempt.to_string())
             .arg("enqueued_at")

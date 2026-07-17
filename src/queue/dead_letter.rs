@@ -172,9 +172,9 @@ impl DeadLetterService {
             return Ok(false);
         }
 
-        // Re-enqueue to the main stream
+        // Re-enqueue to the main stream (no job_id for DLQ retries)
         queue
-            .enqueue(generation_id, 1)
+            .enqueue(generation_id, "", 1)
             .await
             .map_err(|e| DlqError::Redis(e.to_string()))?;
 

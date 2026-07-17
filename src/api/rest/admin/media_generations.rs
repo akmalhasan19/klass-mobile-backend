@@ -114,6 +114,6 @@ fn build_resource(row: MediaGenerationAdminRow) -> AdminMediaGenerationResource 
     }
 }
 
-fn format_naive_datetime(dt: chrono::NaiveDateTime) -> String {
+fn format_naive_datetime(dt: chrono::DateTime<chrono::Utc>) -> String {
     dt.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string()
 }

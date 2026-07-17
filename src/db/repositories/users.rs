@@ -6,7 +6,7 @@ pub struct User {
     pub id: i64,
     pub name: String,
     pub email: String,
-    pub email_verified_at: Option<chrono::NaiveDateTime>,
+    pub email_verified_at: Option<chrono::DateTime<chrono::Utc>>,
     pub password: String,
     pub avatar_url: Option<String>,
     pub primary_subject_id: Option<i64>,
@@ -14,8 +14,8 @@ pub struct User {
     pub remember_token: Option<String>,
     pub security_question: Option<String>,
     pub security_answer: Option<String>,
-    pub created_at: Option<chrono::NaiveDateTime>,
-    pub updated_at: Option<chrono::NaiveDateTime>,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Debug)]
