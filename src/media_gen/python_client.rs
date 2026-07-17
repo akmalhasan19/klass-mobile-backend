@@ -149,6 +149,22 @@ impl PythonMediaGeneratorClient {
         }
     }
 
+    async fn load_spec(&self, generation_id: Uuid) -> Result<serde_json::Value, PythonClientError> {
+        use sqlx::Row;
+        let rec = sqlx::query(
+            "SELECT generation_spec_payload FROM media_generations WHERE id = $1"
+        )
+        .bind(generation_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let row = rec.ok_or_else(|| PythonClientError::NotFound(generation_id.to_string()))?;
+        let spec: Option<serde_json::Value> = row.try_get("generation_spec_payload")?;
+        
+        let spec = spec.ok_or_else(|| PythonClientError::MissingSpec(generation_id.to_string()))?;
+        
+        Ok(spec)
+    }
 }
 
 // ─── Fire-and-Forget: Submit job to Python async endpoint (Task 1.4.4) ───────
