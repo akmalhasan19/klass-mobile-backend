@@ -568,7 +568,7 @@ pub async fn job_status(
         if let Some(ref s3_key) = gen.s3_object_key {
             match crate::storage::r2::generate_presigned_url(
                 &state.s3_client,
-                &state.config.r2_bucket_name,
+                &state.config.r2_transit_bucket_name,
                 s3_key,
                 std::time::Duration::from_secs(PRESIGNED_URL_TTL_SECS),
             )
