@@ -21,6 +21,9 @@ impl AppState {
     pub async fn new(config: AppConfig) -> anyhow::Result<Self> {
         let db_pool = PgPoolOptions::new()
             .max_connections(config.database_max_connections)
+            .test_before_acquire(true)
+            .idle_timeout(std::time::Duration::from_secs(300))
+            .max_lifetime(std::time::Duration::from_secs(1800))
             .connect(&config.database_url)
             .await?;
 
