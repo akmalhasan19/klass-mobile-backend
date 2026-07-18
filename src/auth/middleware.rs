@@ -95,7 +95,10 @@ where
 
         let token_record = crate::auth::tokens::verify_token(&app_state.db_pool, token)
             .await
-            .map_err(|_| internal_error_response("token verification failed"))?
+            .map_err(|e| {
+                tracing::error!("token verification error: {:?}", e);
+                internal_error_response("token verification failed")
+            })?
             .ok_or_else(|| unauthorized_response("invalid or expired token"))?;
 
         let user = crate::db::repositories::users::PgUsersRepo::new(app_state.db_pool.clone())
