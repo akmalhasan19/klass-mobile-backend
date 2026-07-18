@@ -42,7 +42,9 @@ pub async fn setup() -> Option<TestContext> {
 
     let config = AppConfig::from_env().ok()?;
     let state = AppState::new(config).await.ok()?;
-    let app = klass_gateway::api::rest::api_router().with_state(state);
+    let app = axum::Router::new()
+        .nest("/api/v1", klass_gateway::api::rest::api_router())
+        .with_state(state);
 
     Some(TestContext { app, pool })
 }

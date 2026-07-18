@@ -80,7 +80,8 @@ async fn run_server(config: AppConfig) -> anyhow::Result<()> {
             post(api::rest::media_webhook::webhook_handler),
         );
 
-    let app = api::rest::api_router()
+    let app = Router::new()
+        .nest("/api/v1", api::rest::api_router())
         .route("/health", get(health_check))
         .nest("/internal", internal_routes)
         .merge(swagger)

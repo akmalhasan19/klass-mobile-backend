@@ -174,7 +174,7 @@ async fn test_get_topics_returns_paginated_data() {
 
     let ids = seed(&ctx.pool).await;
 
-    let (status, json) = get_json(&ctx.app, "/topics").await;
+    let (status, json) = get_json(&ctx.app, "/api/v1/topics").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["success"], true);
     assert!(json["data"].as_array().is_some());
@@ -198,7 +198,7 @@ async fn test_get_topics_with_pagination_params() {
 
     let ids = seed(&ctx.pool).await;
 
-    let (status, json) = get_json(&ctx.app, "/topics?page=1&per_page=5").await;
+    let (status, json) = get_json(&ctx.app, "/api/v1/topics?page=1&per_page=5").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["meta"]["current_page"], 1);
     assert_eq!(json["meta"]["per_page"], 5);
@@ -218,7 +218,7 @@ async fn test_get_topics_with_is_published_filter() {
 
     let ids = seed(&ctx.pool).await;
 
-    let (status, json) = get_json(&ctx.app, "/topics?is_published=true").await;
+    let (status, json) = get_json(&ctx.app, "/api/v1/topics?is_published=true").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["success"], true);
 
@@ -243,7 +243,7 @@ async fn test_get_topics_with_subject_filter() {
 
     let ids = seed(&ctx.pool).await;
 
-    let uri = format!("/topics?subject_id={}", ids.subject_id);
+    let uri = format!("/api/v1/topics?subject_id={}", ids.subject_id);
     let (status, json) = get_json(&ctx.app, &uri).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["success"], true);
@@ -263,7 +263,7 @@ async fn test_get_topics_with_search_filter() {
 
     let ids = seed(&ctx.pool).await;
 
-    let (status, json) = get_json(&ctx.app, "/topics?search=Test%20Topic").await;
+    let (status, json) = get_json(&ctx.app, "/api/v1/topics?search=Test%20Topic").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["success"], true);
 
@@ -286,7 +286,7 @@ async fn test_get_topics_with_include_contents() {
 
     let ids = seed(&ctx.pool).await;
 
-    let (status, json) = get_json(&ctx.app, "/topics?include_contents=true").await;
+    let (status, json) = get_json(&ctx.app, "/api/v1/topics?include_contents=true").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["success"], true);
 
@@ -305,7 +305,7 @@ async fn test_get_topic_by_id() {
 
     let ids = seed(&ctx.pool).await;
 
-    let uri = format!("/topics/{}", ids.topic_id);
+    let uri = format!("/api/v1/topics/{}", ids.topic_id);
     let (status, json) = get_json(&ctx.app, &uri).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["success"], true);
@@ -327,7 +327,7 @@ async fn test_get_topic_not_found() {
         }
     };
 
-    let (status, json) = get_json(&ctx.app, "/topics/00000000-0000-0000-0000-000000000000").await;
+    let (status, json) =         get_json(&ctx.app, "/api/v1/topics/00000000-0000-0000-0000-000000000000").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(json["success"], false);
 }
@@ -346,7 +346,7 @@ async fn test_get_contents_returns_paginated_data() {
 
     let ids = seed(&ctx.pool).await;
 
-    let (status, json) = get_json(&ctx.app, "/contents").await;
+    let (status, json) = get_json(&ctx.app, "/api/v1/contents").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["success"], true);
     assert!(json["data"].as_array().is_some());
@@ -370,7 +370,7 @@ async fn test_get_contents_with_topic_id_filter() {
 
     let ids = seed(&ctx.pool).await;
 
-    let uri = format!("/contents?topic_id={}", ids.topic_id);
+    let uri = format!("/api/v1/contents?topic_id={}", ids.topic_id);
     let (status, json) = get_json(&ctx.app, &uri).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["success"], true);
@@ -394,7 +394,7 @@ async fn test_get_contents_with_type_filter() {
 
     let ids = seed(&ctx.pool).await;
 
-    let (status, json) = get_json(&ctx.app, "/contents?type=module").await;
+    let (status, json) = get_json(&ctx.app, "/api/v1/contents?type=module").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["success"], true);
 
@@ -417,7 +417,7 @@ async fn test_get_contents_with_search_filter() {
 
     let ids = seed(&ctx.pool).await;
 
-    let (status, json) = get_json(&ctx.app, "/contents?search=Test%20Content").await;
+    let (status, json) = get_json(&ctx.app, "/api/v1/contents?search=Test%20Content").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["success"], true);
 
@@ -439,7 +439,7 @@ async fn test_get_content_by_id() {
 
     let ids = seed(&ctx.pool).await;
 
-    let uri = format!("/contents/{}", ids.content_id);
+    let uri = format!("/api/v1/contents/{}", ids.content_id);
     let (status, json) = get_json(&ctx.app, &uri).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["success"], true);
@@ -464,7 +464,7 @@ async fn test_get_content_not_found() {
     };
 
     let (status, json) =
-        get_json(&ctx.app, "/contents/00000000-0000-0000-0000-000000000000").await;
+        get_json(&ctx.app, "/api/v1/contents/00000000-0000-0000-0000-000000000000").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(json["success"], false);
 }
@@ -483,7 +483,7 @@ async fn test_get_marketplace_tasks_returns_paginated_data() {
 
     let ids = seed(&ctx.pool).await;
 
-    let (status, json) = get_json(&ctx.app, "/marketplace-tasks").await;
+    let (status, json) = get_json(&ctx.app, "/api/v1/marketplace-tasks").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["success"], true);
     assert!(json["data"].as_array().is_some());
@@ -507,7 +507,7 @@ async fn test_get_marketplace_tasks_with_status_filter() {
 
     let ids = seed(&ctx.pool).await;
 
-    let (status, json) = get_json(&ctx.app, "/marketplace-tasks?status=open").await;
+    let (status, json) = get_json(&ctx.app, "/api/v1/marketplace-tasks?status=open").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["success"], true);
 
@@ -582,7 +582,7 @@ async fn test_get_marketplace_task_not_found() {
     };
 
     let (status, json) =
-        get_json(&ctx.app, "/marketplace-tasks/00000000-0000-0000-0000-000000000000").await;
+        get_json(&ctx.app, "/api/v1/marketplace-tasks/00000000-0000-0000-0000-000000000000").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(json["success"], false);
 }
@@ -601,7 +601,7 @@ async fn test_get_student_progress_returns_paginated_data() {
 
     let ids = seed(&ctx.pool).await;
 
-    let (status, json) = get_json(&ctx.app, "/student-progress").await;
+    let (status, json) = get_json(&ctx.app, "/api/v1/student-progress").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["success"], true);
     assert!(json["data"].as_array().is_some());
@@ -625,7 +625,7 @@ async fn test_get_student_progress_with_search_filter() {
 
     let ids = seed(&ctx.pool).await;
 
-    let (status, json) = get_json(&ctx.app, "/student-progress?search=Test%20Student").await;
+    let (status, json) = get_json(&ctx.app, "/api/v1/student-progress?search=Test%20Student").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["success"], true);
 
@@ -648,7 +648,7 @@ async fn test_get_student_progress_by_id() {
 
     let ids = seed(&ctx.pool).await;
 
-    let uri = format!("/student-progress/{}", ids.progress_id);
+    let uri = format!("/api/v1/student-progress/{}", ids.progress_id);
     let (status, json) = get_json(&ctx.app, &uri).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["success"], true);
@@ -673,7 +673,7 @@ async fn test_get_student_progress_not_found() {
     };
 
     let (status, json) =
-        get_json(&ctx.app, "/student-progress/00000000-0000-0000-0000-000000000000").await;
+        get_json(&ctx.app, "/api/v1/student-progress/00000000-0000-0000-0000-000000000000").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(json["success"], false);
 }
@@ -692,7 +692,7 @@ async fn test_get_homepage_sections_returns_data() {
 
     let ids = seed(&ctx.pool).await;
 
-    let (status, json) = get_json(&ctx.app, "/homepage-sections").await;
+    let (status, json) = get_json(&ctx.app, "/api/v1/homepage-sections").await;
     assert_eq!(status, StatusCode::OK);
     assert!(json["data"].as_array().is_some());
 
@@ -717,7 +717,7 @@ async fn test_get_homepage_recommendations_returns_data() {
 
     let ids = seed(&ctx.pool).await;
 
-    let (status, json) = get_json(&ctx.app, "/homepage-recommendations").await;
+    let (status, json) = get_json(&ctx.app, "/api/v1/homepage-recommendations").await;
     assert_eq!(status, StatusCode::OK);
     assert!(json["data"].as_array().is_some());
     assert!(json["meta"]["total"].as_i64().is_some());
@@ -746,7 +746,7 @@ async fn test_get_homepage_recommendations_with_limit() {
 
     let ids = seed(&ctx.pool).await;
 
-    let (status, json) = get_json(&ctx.app, "/homepage-recommendations?limit=1").await;
+    let (status, json) = get_json(&ctx.app, "/api/v1/homepage-recommendations?limit=1").await;
     assert_eq!(status, StatusCode::OK);
 
     let data = json["data"].as_array().unwrap();
@@ -770,7 +770,7 @@ async fn test_get_gallery_returns_paginated_data() {
 
     let ids = seed(&ctx.pool).await;
 
-    let (status, json) = get_json(&ctx.app, "/gallery").await;
+    let (status, json) = get_json(&ctx.app, "/api/v1/gallery").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["success"], true);
     assert!(json["data"].as_array().is_some());

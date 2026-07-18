@@ -121,7 +121,7 @@ async fn test_media_gen_create_returns_202() {
     });
 
     let (status, json) =
-        post_json(&ctx.app, "/media-generations", &teacher.token, &body).await;
+        post_json(&ctx.app, "/api/v1/media-generations", &teacher.token, &body).await;
     assert_eq!(status, StatusCode::ACCEPTED, "Expected 202, got: {json}");
     assert_eq!(json["success"], true);
     assert!(json["data"]["id"].as_str().is_some());
@@ -138,7 +138,7 @@ async fn test_media_gen_create_returns_202() {
 
     let (status, json) = get_json(
         &ctx.app,
-        &format!("/media-generations/{gen_id}"),
+        &format!("/api/v1/media-generations/{gen_id}"),
         &teacher.token,
     )
     .await;
@@ -150,7 +150,7 @@ async fn test_media_gen_create_returns_202() {
     );
 
     let (status, json) =
-        get_json(&ctx.app, "/media-generations", &teacher.token).await;
+        get_json(&ctx.app, "/api/v1/media-generations", &teacher.token).await;
     assert_eq!(status, StatusCode::OK);
     let generations = json["data"]["generations"]
         .as_array()
@@ -166,7 +166,7 @@ async fn test_media_gen_create_returns_202() {
     let regen_body = serde_json::json!({"additional_prompt": "Tambah gambar"});
     let (status, json) = post_json(
         &ctx.app,
-        &format!("/media-generations/{gen_id}/regenerate"),
+        &format!("/api/v1/media-generations/{gen_id}/regenerate"),
         &teacher.token,
         &regen_body,
     )
@@ -217,7 +217,7 @@ async fn test_media_gen_regenerate_from_terminal_parent() {
     let regen_body = serde_json::json!({"additional_prompt": "Tambahkan latihan soal"});
     let (status, json) = post_json(
         &ctx.app,
-        &format!("/media-generations/{parent_id}/regenerate"),
+        &format!("/api/v1/media-generations/{parent_id}/regenerate"),
         &teacher.token,
         &regen_body,
     )
@@ -324,7 +324,7 @@ async fn test_media_gen_index_with_parent_id_chain() {
     // Query chain from child
     let (status, json) = get_json(
         &ctx.app,
-        &format!("/media-generations?parent_id={child_id}"),
+        &format!("/api/v1/media-generations?parent_id={child_id}"),
         &teacher.token,
     )
     .await;
@@ -387,7 +387,7 @@ async fn test_media_gen_forbidden_for_non_teacher() {
 
     let body = serde_json::json!({"raw_prompt": "Test prompt"});
     let (status, json) =
-        post_json(&ctx.app, "/media-generations", &token, &body).await;
+        post_json(&ctx.app, "/api/v1/media-generations", &token, &body).await;
     assert_eq!(status, StatusCode::FORBIDDEN, "Expected 403, got: {json}");
     assert_eq!(json["error"]["code"], "forbidden");
 

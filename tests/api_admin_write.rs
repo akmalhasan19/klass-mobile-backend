@@ -316,7 +316,7 @@ async fn test_non_admin_gets_forbidden() {
     // Try PATCH /admin/topics/{non-existent-id} as non-admin
     let (status, json) = patch_json(
         &ctx.app,
-        &format!("/admin/topics/{}", Uuid::new_v4()),
+        &format!("/api/v1/admin/topics/{}", Uuid::new_v4()),
         &token,
         &serde_json::json!({"title": "Hack Attempt"}),
     )
@@ -353,7 +353,7 @@ async fn test_admin_topics_update_publish_reorder_delete() {
     // ── Update topic title ───────────────────────────────────────────────
     let (status, json) = patch_json(
         &ctx.app,
-        &format!("/admin/topics/{}", seed.topic_id),
+        &format!("/api/v1/admin/topics/{}", seed.topic_id),
         &seed.token,
         &serde_json::json!({"title": "Updated Admin Topic"}),
     )
@@ -366,7 +366,7 @@ async fn test_admin_topics_update_publish_reorder_delete() {
     // ── Toggle publish off ───────────────────────────────────────────────
     let (status, json) = patch_json(
         &ctx.app,
-        &format!("/admin/topics/{}/publish", seed.topic_id),
+        &format!("/api/v1/admin/topics/{}/publish", seed.topic_id),
         &seed.token,
         &serde_json::json!({"is_published": false}),
     )
@@ -377,7 +377,7 @@ async fn test_admin_topics_update_publish_reorder_delete() {
     // ── Publish back on ──────────────────────────────────────────────────
     let (status, json) = patch_json(
         &ctx.app,
-        &format!("/admin/topics/{}/publish", seed.topic_id),
+        &format!("/api/v1/admin/topics/{}/publish", seed.topic_id),
         &seed.token,
         &serde_json::json!({"is_published": true}),
     )
@@ -388,7 +388,7 @@ async fn test_admin_topics_update_publish_reorder_delete() {
     // ── Activity log was written for publish action ──────────────────────
     let (status, json) = get_json(
         &ctx.app,
-        &format!("/admin/activity-logs?action=publish_topic&actor_id={}", seed.user_id),
+        &format!("/api/v1/admin/activity-logs?action=publish_topic&actor_id={}", seed.user_id),
         &seed.token,
     )
     .await;
@@ -398,7 +398,7 @@ async fn test_admin_topics_update_publish_reorder_delete() {
     // ── Reorder (attempt down then up — may be at edge) ──────────────────
     let (status, _json) = patch_json(
         &ctx.app,
-        &format!("/admin/topics/{}/reorder", seed.topic_id),
+        &format!("/api/v1/admin/topics/{}/reorder", seed.topic_id),
         &seed.token,
         &serde_json::json!({"direction": "down"}),
     )
@@ -409,7 +409,7 @@ async fn test_admin_topics_update_publish_reorder_delete() {
     // ── Delete topic ─────────────────────────────────────────────────────
     let (status, json) = delete_json(
         &ctx.app,
-        &format!("/admin/topics/{}", seed.topic_id),
+        &format!("/api/v1/admin/topics/{}", seed.topic_id),
         &seed.token,
     )
     .await;
@@ -440,7 +440,7 @@ async fn test_admin_contents_create_update_delete() {
         "title": "New Quiz Content",
         "data": {"question_count": 5}
     });
-    let (status, json) = post_json(&ctx.app, "/admin/contents", &seed.token, &create_body).await;
+    let (status, json) = post_json(&ctx.app, "/api/v1/admin/contents", &seed.token, &create_body).await;
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(json["success"], true);
     assert_eq!(json["data"]["type"], "quiz");
@@ -452,7 +452,7 @@ async fn test_admin_contents_create_update_delete() {
     // ── Update content ───────────────────────────────────────────────────
     let (status, json) = patch_json(
         &ctx.app,
-        &format!("/admin/contents/{}", new_content_id),
+        &format!("/api/v1/admin/contents/{}", new_content_id),
         &seed.token,
         &serde_json::json!({"title": "Updated Quiz"}),
     )
@@ -463,7 +463,7 @@ async fn test_admin_contents_create_update_delete() {
     // ── Activity log was written for create ───────────────────────────────
     let (status, json) = get_json(
         &ctx.app,
-        "/admin/activity-logs?action=create_content",
+        "/api/v1/admin/activity-logs?action=create_content",
         &seed.token,
     )
     .await;
@@ -474,7 +474,7 @@ async fn test_admin_contents_create_update_delete() {
     // ── Delete created content ───────────────────────────────────────────
     let (status, _json) = delete_json(
         &ctx.app,
-        &format!("/admin/contents/{}", new_content_id),
+        &format!("/api/v1/admin/contents/{}", new_content_id),
         &seed.token,
     )
     .await;
@@ -506,7 +506,7 @@ async fn test_admin_marketplace_tasks_crud() {
     });
     let (status, json) = post_json(
         &ctx.app,
-        "/admin/marketplace-tasks",
+        "/api/v1/admin/marketplace-tasks",
         &seed.token,
         &create_body,
     )
@@ -520,7 +520,7 @@ async fn test_admin_marketplace_tasks_crud() {
     // ── Update task ──────────────────────────────────────────────────────
     let (status, json) = patch_json(
         &ctx.app,
-        &format!("/admin/marketplace-tasks/{}", new_task_id),
+        &format!("/api/v1/admin/marketplace-tasks/{}", new_task_id),
         &seed.token,
         &serde_json::json!({"description": "Updated description"}),
     )
@@ -531,7 +531,7 @@ async fn test_admin_marketplace_tasks_crud() {
     // ── Update status ────────────────────────────────────────────────────
     let (status, json) = patch_json(
         &ctx.app,
-        &format!("/admin/marketplace-tasks/{}/status", new_task_id),
+        &format!("/api/v1/admin/marketplace-tasks/{}/status", new_task_id),
         &seed.token,
         &serde_json::json!({"status": "taken"}),
     )
@@ -542,7 +542,7 @@ async fn test_admin_marketplace_tasks_crud() {
     // ── Delete task ──────────────────────────────────────────────────────
     let (status, _json) = delete_json(
         &ctx.app,
-        &format!("/admin/marketplace-tasks/{}", new_task_id),
+        &format!("/api/v1/admin/marketplace-tasks/{}", new_task_id),
         &seed.token,
     )
     .await;
@@ -573,7 +573,7 @@ async fn test_admin_student_progress_crud() {
     });
     let (status, json) = post_json(
         &ctx.app,
-        "/admin/student-progress",
+        "/api/v1/admin/student-progress",
         &seed.token,
         &create_body,
     )
@@ -588,7 +588,7 @@ async fn test_admin_student_progress_crud() {
     // ── Update ───────────────────────────────────────────────────────────
     let (status, json) = patch_json(
         &ctx.app,
-        &format!("/admin/student-progress/{}", new_progress_id),
+        &format!("/api/v1/admin/student-progress/{}", new_progress_id),
         &seed.token,
         &serde_json::json!({"score": 95}),
     )
@@ -599,7 +599,7 @@ async fn test_admin_student_progress_crud() {
     // ── Delete ───────────────────────────────────────────────────────────
     let (status, _json) = delete_json(
         &ctx.app,
-        &format!("/admin/student-progress/{}", new_progress_id),
+        &format!("/api/v1/admin/student-progress/{}", new_progress_id),
         &seed.token,
     )
     .await;
@@ -632,7 +632,7 @@ async fn test_admin_homepage_sections_bulk_update() {
     });
     let (status, json) = patch_json(
         &ctx.app,
-        "/admin/homepage-sections",
+        "/api/v1/admin/homepage-sections",
         &seed.token,
         &body,
     )
@@ -653,7 +653,7 @@ async fn test_admin_homepage_sections_bulk_update() {
     // ── Activity log recorded ────────────────────────────────────────────
     let (status, json) = get_json(
         &ctx.app,
-        &format!("/admin/activity-logs?action=update_homepage_sections&actor_id={}", seed.user_id),
+        &format!("/api/v1/admin/activity-logs?action=update_homepage_sections&actor_id={}", seed.user_id),
         &seed.token,
     )
     .await;
@@ -695,7 +695,7 @@ async fn test_admin_system_settings_read_update() {
     .unwrap();
 
     // ── GET settings (grouped) ───────────────────────────────────────────
-    let (status, json) = get_json(&ctx.app, "/admin/settings", &seed.token).await;
+    let (status, json) = get_json(&ctx.app, "/api/v1/admin/settings", &seed.token).await;
     assert_eq!(status, StatusCode::OK);
     assert!(json["data"].is_object());
     let general = json["data"]["general"].as_array();
@@ -709,7 +709,7 @@ async fn test_admin_system_settings_read_update() {
     });
     let (status, _json) = patch_json(
         &ctx.app,
-        "/admin/settings",
+        "/api/v1/admin/settings",
         &seed.token,
         &body,
     )
@@ -752,14 +752,14 @@ async fn test_admin_activity_logs_list() {
     // Perform a few mutations to generate activity logs
     let _ = patch_json(
         &ctx.app,
-        &format!("/admin/topics/{}", seed.topic_id),
+        &format!("/api/v1/admin/topics/{}", seed.topic_id),
         &seed.token,
         &serde_json::json!({"title": "Activity Log Test"}),
     )
     .await;
 
     // ── GET activity logs ────────────────────────────────────────────────
-    let (status, json) = get_json(&ctx.app, "/admin/activity-logs", &seed.token).await;
+    let (status, json) = get_json(&ctx.app, "/api/v1/admin/activity-logs", &seed.token).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["success"], true);
     assert!(json["data"].as_array().unwrap().len() >= 1);
@@ -773,7 +773,7 @@ async fn test_admin_activity_logs_list() {
     // ── Filter by action ─────────────────────────────────────────────────
     let (status, json) = get_json(
         &ctx.app,
-        "/admin/activity-logs?action=update_topic",
+        "/api/v1/admin/activity-logs?action=update_topic",
         &seed.token,
     )
     .await;
@@ -788,7 +788,7 @@ async fn test_admin_activity_logs_list() {
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     let (status, _json) = get_json(
         &ctx.app,
-        &format!("/admin/activity-logs?date_from={}&date_to={}", now, now),
+        &format!("/api/v1/admin/activity-logs?date_from={}&date_to={}", now, now),
         &seed.token,
     )
     .await;
@@ -797,7 +797,7 @@ async fn test_admin_activity_logs_list() {
     // ── Search ───────────────────────────────────────────────────────────
     let (status, _json) = get_json(
         &ctx.app,
-        "/admin/activity-logs?search=update_topic",
+        "/api/v1/admin/activity-logs?search=update_topic",
         &seed.token,
     )
     .await;
@@ -840,7 +840,7 @@ async fn test_admin_upload_integration() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/admin/upload/materials"))
+                .uri(&format!("/api/v1/admin/upload/materials"))
                 .header("authorization", format!("Bearer {}", seed.token))
                 .header(
                     "content-type",
@@ -899,7 +899,7 @@ async fn test_admin_reorder_topic() {
     // Try reorder (may succeed or be at edge)
     let (status, _json) = patch_json(
         &ctx.app,
-        &format!("/admin/topics/{}/reorder", seed.topic_id),
+        &format!("/api/v1/admin/topics/{}/reorder", seed.topic_id),
         &seed.token,
         &serde_json::json!({"direction": "up"}),
     )
@@ -928,7 +928,7 @@ async fn test_admin_reorder_invalid_direction() {
 
     let (status, json) = patch_json(
         &ctx.app,
-        &format!("/admin/topics/{}/reorder", seed.topic_id),
+        &format!("/api/v1/admin/topics/{}/reorder", seed.topic_id),
         &seed.token,
         &serde_json::json!({"direction": "sideways"}),
     )

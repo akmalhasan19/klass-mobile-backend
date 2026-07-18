@@ -39,7 +39,7 @@ async fn test_register_login_me_logout_refresh_flow() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/auth/register")
+                .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&register_body).unwrap()))
                 .unwrap(),
@@ -72,7 +72,7 @@ async fn test_register_login_me_logout_refresh_flow() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/auth/login")
+                .uri("/api/v1/auth/login")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&login_body).unwrap()))
                 .unwrap(),
@@ -95,7 +95,7 @@ async fn test_register_login_me_logout_refresh_flow() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/auth/me")
+                .uri("/api/v1/auth/me")
                 .header("authorization", format!("Bearer {}", login_token))
                 .body(Body::empty())
                 .unwrap(),
@@ -118,7 +118,7 @@ async fn test_register_login_me_logout_refresh_flow() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/auth/refresh")
+                .uri("/api/v1/auth/refresh")
                 .header("authorization", format!("Bearer {}", login_token))
                 .body(Body::empty())
                 .unwrap(),
@@ -141,7 +141,7 @@ async fn test_register_login_me_logout_refresh_flow() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/auth/logout")
+                .uri("/api/v1/auth/logout")
                 .header("authorization", format!("Bearer {}", new_token))
                 .body(Body::empty())
                 .unwrap(),
@@ -162,7 +162,7 @@ async fn test_register_login_me_logout_refresh_flow() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/auth/me")
+                .uri("/api/v1/auth/me")
                 .header("authorization", format!("Bearer {}", new_token))
                 .body(Body::empty())
                 .unwrap(),
@@ -201,7 +201,7 @@ async fn test_reset_password_flow_with_security_question() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/auth/register")
+                .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&register_body).unwrap()))
                 .unwrap(),
@@ -233,7 +233,7 @@ async fn test_reset_password_flow_with_security_question() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/auth/get-security-question")
+                .uri("/api/v1/auth/get-security-question")
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_string(&get_question_body).unwrap(),
@@ -266,7 +266,7 @@ async fn test_reset_password_flow_with_security_question() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/auth/verify-and-reset-password")
+                .uri("/api/v1/auth/verify-and-reset-password")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&reset_body).unwrap()))
                 .unwrap(),
@@ -288,7 +288,7 @@ async fn test_reset_password_flow_with_security_question() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/auth/verify-and-reset-password")
+                .uri("/api/v1/auth/verify-and-reset-password")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&reset_body).unwrap()))
                 .unwrap(),
@@ -314,7 +314,7 @@ async fn test_reset_password_flow_with_security_question() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/auth/login")
+                .uri("/api/v1/auth/login")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&login_body).unwrap()))
                 .unwrap(),
@@ -359,7 +359,7 @@ async fn test_wrong_password_returns_unauthorized() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/auth/register")
+                .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&register_body).unwrap()))
                 .unwrap(),
@@ -384,7 +384,7 @@ async fn test_wrong_password_returns_unauthorized() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/auth/login")
+                .uri("/api/v1/auth/login")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&login_body).unwrap()))
                 .unwrap(),
@@ -429,7 +429,7 @@ async fn test_register_duplicate_email_returns_conflict() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/auth/register")
+                .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&register_body).unwrap()))
                 .unwrap(),
@@ -449,7 +449,7 @@ async fn test_register_duplicate_email_returns_conflict() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/auth/register")
+                .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&register_body).unwrap()))
                 .unwrap(),

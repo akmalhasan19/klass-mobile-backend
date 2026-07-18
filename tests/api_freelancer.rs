@@ -275,7 +275,7 @@ async fn test_suggest_freelancers_deterministic() {
     // First call
     let (status, json) = post_json(
         &ctx.app,
-        &format!("/media-generations/{}/suggest-freelancers", seed.generation_id),
+        &format!("/api/v1/media-generations/{}/suggest-freelancers", seed.generation_id),
         &seed.teacher.token,
         &body,
     )
@@ -301,7 +301,7 @@ async fn test_suggest_freelancers_deterministic() {
     // Second call — should produce identical scores
     let (status, json) = post_json(
         &ctx.app,
-        &format!("/media-generations/{}/suggest-freelancers", seed.generation_id),
+        &format!("/api/v1/media-generations/{}/suggest-freelancers", seed.generation_id),
         &seed.teacher.token,
         &body,
     )
@@ -352,7 +352,7 @@ async fn test_hire_freelancer_auto_suggest() {
 
     let (status, json) = post_json(
         &ctx.app,
-        &format!("/media-generations/{}/hire-freelancer", seed.generation_id),
+        &format!("/api/v1/media-generations/{}/hire-freelancer", seed.generation_id),
         &seed.teacher.token,
         &body,
     )
@@ -402,7 +402,7 @@ async fn test_hire_freelancer_manual_task() {
 
     let (status, json) = post_json(
         &ctx.app,
-        &format!("/media-generations/{}/hire-freelancer", seed.generation_id),
+        &format!("/api/v1/media-generations/{}/hire-freelancer", seed.generation_id),
         &seed.teacher.token,
         &body,
     )
@@ -450,7 +450,7 @@ async fn test_hire_freelancer_auto_suggest_requires_freelancer_id() {
 
     let (status, json) = post_json(
         &ctx.app,
-        &format!("/media-generations/{}/hire-freelancer", seed.generation_id),
+        &format!("/api/v1/media-generations/{}/hire-freelancer", seed.generation_id),
         &seed.teacher.token,
         &body,
     )
@@ -509,7 +509,7 @@ async fn test_hire_freelancer_forbidden_non_teacher() {
     let gen_id = Uuid::new_v4();
     let (status, json) = post_json(
         &ctx.app,
-        &format!("/media-generations/{gen_id}/hire-freelancer"),
+        &format!("/api/v1/media-generations/{gen_id}/hire-freelancer"),
         &student_token,
         &body,
     )
