@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::db::repositories::media_generations::{
     MediaGenerationsRepo, PgMediaGenerationsRepo, UpdateGenerationErrorPayload,
-    UpdateS3MetadataPayload, UpdateGenerationJobStatusPayload,
+    UpdateS3MetadataPayload, UpdateGenerationJobStatusPayload, UpdatePayloadsPayload,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
@@ -24,9 +24,11 @@ pub struct MediaWebhookPayload {
     pub status: String,
     pub s3_object_key: Option<String>,
     pub presigned_url: Option<String>,
+    pub file_url: Option<String>,
     pub expires_at: Option<chrono::NaiveDateTime>,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
+    pub artifact_metadata: Option<serde_json::Value>,
 }
 
 // ─── Response ────────────────────────────────────────────────────────────────
@@ -162,6 +164,18 @@ pub async fn webhook_handler(
                     "webhook completed without s3_object_key — status will still be marked completed"
                 );
             }
+
+            // Persist the entire payload to generator_service_response so that publication service
+            // can read `file_url`, `artifact_metadata`, etc.
+            repo.update_payloads(
+                generation_id,
+                &UpdatePayloadsPayload {
+                    generator_service_response: Some(serde_json::to_value(&payload).unwrap_or_default()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .map_err(|e| AppError::Internal(format!("failed to update payload: {e}")))?;
 
             // Update status to completed
             repo.update_generation_job_status(

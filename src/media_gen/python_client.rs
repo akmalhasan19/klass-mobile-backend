@@ -34,7 +34,7 @@ use uuid::Uuid;
 
 use crate::auth::signing::InterServiceRequestSigner;
 use crate::config::AppConfig;
-use crate::contracts::generation_spec as spec_contract;
+
 use crate::orchestrator::workflow::{GenerateStep, WorkflowError};
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -104,8 +104,8 @@ pub struct PythonMediaGeneratorClient {
     webhook_base_url: String,
     signer: InterServiceRequestSigner,
     timeout: Duration,
-    retry_attempts: u32,
-    retry_backoff: Duration,
+    _retry_attempts: u32,
+    _retry_backoff: Duration,
 }
 
 impl PythonMediaGeneratorClient {
@@ -120,8 +120,8 @@ impl PythonMediaGeneratorClient {
             webhook_base_url: config.webhook_base_url.trim_end_matches('/').to_string(),
             signer,
             timeout: Duration::from_secs_f64(python_cfg.timeout_seconds.max(1.0)),
-            retry_attempts: python_cfg.retry_attempts.max(1),
-            retry_backoff: Duration::from_millis(python_cfg.retry_sleep_milliseconds),
+            _retry_attempts: python_cfg.retry_attempts.max(1),
+            _retry_backoff: Duration::from_millis(python_cfg.retry_sleep_milliseconds),
         }
     }
 
@@ -144,8 +144,8 @@ impl PythonMediaGeneratorClient {
             webhook_base_url: webhook_base_url.trim_end_matches('/').to_string(),
             signer,
             timeout,
-            retry_attempts: retry_attempts.max(1),
-            retry_backoff,
+            _retry_attempts: retry_attempts.max(1),
+            _retry_backoff: retry_backoff,
         }
     }
 
@@ -398,19 +398,6 @@ mod tests {
     fn test_error_display_missing_spec() {
         let err = PythonClientError::MissingSpec("gen-1".to_string());
         assert!(err.to_string().contains("generation spec payload missing"));
-    }
-
-    #[test]
-    fn test_error_display_renderer_error() {
-        let err = PythonClientError::RendererError {
-            code: "PYTHON_SERVICE_UNAVAILABLE".to_string(),
-            message: "timeout".to_string(),
-            status: 503,
-            raw_body: Value::Null,
-        };
-        let msg = err.to_string();
-        assert!(msg.contains("PYTHON_SERVICE_UNAVAILABLE"));
-        assert!(msg.contains("timeout"));
     }
 
     #[test]

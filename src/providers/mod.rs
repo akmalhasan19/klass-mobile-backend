@@ -192,13 +192,13 @@ mod tests {
     #[test]
     fn test_completion_request_new() {
         let req = CompletionRequest::new(
-            "deepseek/deepseek-v4-flash",
+            "tencent/hy3:free",
             vec![ChatMessage {
                 role: "user".to_string(),
                 content: "Hi".to_string(),
             }],
         );
-        assert_eq!(req.model, "deepseek/deepseek-v4-flash");
+        assert_eq!(req.model, "tencent/hy3:free");
         assert_eq!(req.messages.len(), 1);
     }
 
@@ -283,11 +283,11 @@ mod tests {
                 "index": 0
             }],
             "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
-            "model": "deepseek/deepseek-v4-flash"
+            "model": "tencent/hy3:free"
         }"#;
         let resp: CompletionResponse = serde_json::from_str(json).unwrap();
         assert_eq!(resp.first_choice_content(), Some("Hi"));
-        assert_eq!(resp.model.as_deref(), Some("deepseek/deepseek-v4-flash"));
+        assert_eq!(resp.model.as_deref(), Some("tencent/hy3:free"));
     }
 
     // ── Provider trait ────────────────────────────────────────────────────

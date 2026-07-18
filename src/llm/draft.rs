@@ -754,7 +754,7 @@ mod tests {
         };
         let input = DraftInput {
             taxonomy_hint: Some(hint),
-            model: Some("deepseek/deepseek-v4-flash".to_string()),
+            model: Some("tencent/hy3:free".to_string()),
             instruction: Some("Custom instruction".to_string()),
             ..sample_draft_input()
         };
@@ -763,7 +763,7 @@ mod tests {
             input.taxonomy_hint.as_ref().unwrap().subject_name.as_deref(),
             Some("Matematika")
         );
-        assert_eq!(input.model.as_deref(), Some("deepseek/deepseek-v4-flash"));
+        assert_eq!(input.model.as_deref(), Some("tencent/hy3:free"));
     }
 
     #[test]
@@ -780,7 +780,7 @@ mod tests {
             source: "provider".to_string(),
             adapter_metadata: serde_json::json!({
                 "provider": "openrouter",
-                "model": "deepseek/deepseek-v4-flash",
+                "model": "tencent/hy3:free",
             }),
             fallback_error: None,
             response_headers: HashMap::new(),
@@ -808,7 +808,7 @@ mod tests {
             source: "cache".to_string(),
             adapter_metadata: serde_json::json!({"cache_hit": true}),
             fallback_error: None,
-            response_headers: headers_for("openrouter", "deepseek/deepseek-v4-flash", true, false),
+            response_headers: headers_for("openrouter", "tencent/hy3:free", true, false),
             latency_ms: Some(Decimal::new(300, 3)),
         };
         assert_eq!(result.source, "cache");
@@ -832,7 +832,7 @@ mod tests {
             source: "fallback".to_string(),
             adapter_metadata: serde_json::json!({"fallback": true}),
             fallback_error: Some("provider_response_contract_invalid".to_string()),
-            response_headers: headers_for("openrouter", "deepseek/deepseek-v4-flash", false, true),
+            response_headers: headers_for("openrouter", "tencent/hy3:free", false, true),
             latency_ms: None,
         };
         assert_eq!(result.source, "fallback");
@@ -888,12 +888,12 @@ mod tests {
 
     #[test]
     fn test_headers_for() {
-        let h = headers_for("openrouter", "deepseek/deepseek-v4-flash", true, false);
+        let h = headers_for("openrouter", "tencent/hy3:free", true, false);
         assert_eq!(h.get("x-klass-provider"), Some(&"openrouter".to_string()));
         assert_eq!(h.get("x-klass-cache-status"), Some(&"hit".to_string()));
         assert_eq!(h.get("x-klass-fallback-used"), Some(&"false".to_string()));
 
-        let h2 = headers_for("openrouter", "deepseek/deepseek-v4-flash", false, true);
+        let h2 = headers_for("openrouter", "tencent/hy3:free", false, true);
         assert_eq!(h2.get("x-klass-cache-status"), Some(&"miss".to_string()));
         assert_eq!(h2.get("x-klass-fallback-used"), Some(&"true".to_string()));
     }

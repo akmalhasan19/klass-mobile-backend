@@ -197,9 +197,9 @@ impl RecommendedProjectsRepo for PgRecommendedProjectsRepo {
         Ok(project)
     }
 
+    #[allow(unused_assignments)]
     async fn find_all(&self, filters: &RecommendedProjectFilters) -> anyhow::Result<Vec<RecommendedProject>> {
         let mut conditions: Vec<String> = Vec::new();
-        #[allow(unused_assignments)]
         let mut param_idx = 1u32;
 
         if filters.source_type.is_some() {
@@ -433,9 +433,9 @@ impl RecommendedProjectsRepo for PgRecommendedProjectsRepo {
 
 /// Build the dynamic SET clause parts for UPDATE.
 /// Returns `Vec<String>` where each entry is `"column = $N"` for non-None fields.
+#[allow(unused_assignments)]
 fn dynamic_update_set(payload: &UpdateRecommendedProject) -> Vec<String> {
     let mut parts = Vec::new();
-    #[allow(unused_assignments)]
     let mut idx = 1u32;
 
     macro_rules! add_col {

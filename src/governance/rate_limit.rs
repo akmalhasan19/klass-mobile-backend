@@ -432,8 +432,8 @@ impl RateLimitBucketsRepo {
 /// Check whether a request should be allowed, denied, or degraded.
 ///
 /// - `route`: `"interpret"` or `"respond"`
-/// - `provider`: e.g. `"deepseek"`
-/// - `model`: e.g. `"deepseek-v4-flash"`
+/// - `provider`: e.g. `"tencent"`
+/// - `model`: e.g. `"hy3:free"`
 /// - `projected_cost_usd`: estimated cost of this request (for budget checks)
 ///
 /// Returns a `PreflightDecision`:

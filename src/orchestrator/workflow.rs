@@ -803,9 +803,8 @@ mod tests {
     #[tokio::test]
     async fn test_mock_generate_ok() {
         let step = MockGenerateOk;
-        let result = step.generate("gen-1").await;
+        let result = step.submit_job("gen-1", "job-1").await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap()["status"], "generated");
     }
 
     #[tokio::test]

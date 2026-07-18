@@ -24,7 +24,7 @@ const DEFAULT_RETRY_BACKOFF_MS: u64 = 500;
 pub struct OpenRouterConfig {
     /// OpenRouter API key (sk-or-...).
     pub api_key: String,
-    /// Default model name (e.g. "deepseek/deepseek-v4-flash").
+    /// Default model name (e.g. "tencent/hy3:free").
     pub model: String,
     /// Base URL (e.g. "https://openrouter.ai/api/v1").
     pub base_url: String,
@@ -54,7 +54,7 @@ impl Default for OpenRouterConfig {
     fn default() -> Self {
         Self {
             api_key: String::new(),
-            model: "deepseek/deepseek-v4-flash".to_string(),
+            model: "tencent/hy3:free".to_string(),
             base_url: "https://openrouter.ai/api/v1".to_string(),
             timeout_seconds: DEFAULT_TIMEOUT_SECS,
             retry_attempts: DEFAULT_RETRY_ATTEMPTS,
@@ -275,7 +275,7 @@ mod tests {
     #[test]
     fn test_openrouter_config_default() {
         let config = OpenRouterConfig::default();
-        assert_eq!(config.model, "deepseek/deepseek-v4-flash");
+        assert_eq!(config.model, "tencent/hy3:free");
         assert_eq!(config.timeout_seconds, 90);
         assert_eq!(config.retry_attempts, 2);
         assert_eq!(config.retry_backoff_ms, 500);
@@ -317,7 +317,7 @@ mod tests {
     fn test_from_app_config() {
         let config = crate::config::AppConfig {
             openrouter_api_key: "sk-or-test-key".to_string(),
-            openrouter_model: "deepseek/deepseek-v4-flash".to_string(),
+            openrouter_model: "tencent/hy3:free".to_string(),
             openrouter_base_url: "https://openrouter.ai/api/v1".to_string(),
             host: "0.0.0.0".to_string(),
             port: 8080,
@@ -329,8 +329,10 @@ mod tests {
             r2_access_key_id: String::new(),
             r2_secret_access_key: String::new(),
             r2_bucket_name: String::new(),
+            r2_transit_bucket_name: String::new(),
             r2_public_url: String::new(),
             media_gen_url: String::new(),
+            webhook_base_url: String::new(),
             media_gen_hmac_secret: String::new(),
             media_gen_webhook_secret: String::new(),
             llm_adapter_fallback_url: String::new(),
@@ -364,7 +366,7 @@ mod tests {
         };
         let or_config = OpenRouterConfig::from_app_config(&config);
         assert_eq!(or_config.api_key, "sk-or-test-key");
-        assert_eq!(or_config.model, "deepseek/deepseek-v4-flash");
+        assert_eq!(or_config.model, "tencent/hy3:free");
         assert_eq!(or_config.timeout_seconds, 90);
     }
 

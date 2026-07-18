@@ -16,6 +16,7 @@ pub struct AppConfig {
     pub r2_access_key_id: String,
     pub r2_secret_access_key: String,
     pub r2_bucket_name: String,
+    pub r2_transit_bucket_name: String,
     pub r2_public_url: String,
 
     pub media_gen_url: String,
@@ -116,9 +117,12 @@ impl AppConfig {
             .set_default("rust_log", "info")?
             .set_default("log_format", "json")?
             .set_default("cors_allowed_origins", "")?
-            .set_default("openrouter_model", "deepseek/deepseek-v4-flash")?
+            .set_default("openrouter_model", "tencent/hy3:free")?
             .set_default("openrouter_base_url", "https://openrouter.ai/api/v1")?
             .set_default("llm_adapter_fallback_url", "")?
+            .set_default("media_gen_webhook_secret", "")?
+            .set_default("media_gen_hmac_secret", "")?
+            .set_default("webhook_base_url", "")?
             .set_default("media_generation.interpreter.timeout_seconds", 30.0)?
             .set_default("media_generation.interpreter.connect_timeout_seconds", 10.0)?
             .set_default("media_generation.interpreter.retry_attempts", 2)?
@@ -139,6 +143,7 @@ impl AppConfig {
             .set_default("media_generation.queue.timeout_seconds", 300)?
             .set_default("media_generation.queue.backoff_seconds", 30)?
             .set_default("media_generation.queue.concurrency", 1)?
+            .set_default("r2_transit_bucket_name", "media-generation-service-bucket")?
             .build()?;
 
         let cfg: Self = config.try_deserialize()?;

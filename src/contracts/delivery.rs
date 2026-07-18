@@ -273,8 +273,8 @@ mod tests {
             "response_meta": {
                 "generated_at": "2026-04-03T10:00:00Z",
                 "llm_used": true,
-                "provider": "deepseek",
-                "model": "deepseek-v4-flash"
+                "provider": "tencent",
+                "model": "hy3:free"
             }
         }"#;
         let result = decode_and_validate(json);

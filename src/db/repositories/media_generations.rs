@@ -893,9 +893,9 @@ async fn fetch_recommended_projects(
 }
 
 /// Build the dynamic SET clause parts for `update_payloads`.
+#[allow(unused_assignments)]
 fn build_payload_set(payload: &UpdatePayloadsPayload) -> Vec<String> {
     let mut parts = Vec::new();
-    #[allow(unused_assignments)]
     let mut idx = 1u32;
 
     macro_rules! add_col {

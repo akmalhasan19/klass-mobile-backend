@@ -171,6 +171,7 @@ pub struct MediaPublicationService {
     s3_client: S3Client,
     http: HttpClient,
     r2_bucket: String,
+    r2_transit_bucket: String,
     r2_public_url: String,
     thumbnail_gen: Arc<dyn ThumbnailGenerator>,
 }
@@ -181,6 +182,7 @@ impl MediaPublicationService {
         s3_client: S3Client,
         http: HttpClient,
         r2_bucket: String,
+        r2_transit_bucket: String,
         r2_public_url: String,
     ) -> Self {
         Self {
@@ -188,6 +190,7 @@ impl MediaPublicationService {
             s3_client,
             http,
             r2_bucket,
+            r2_transit_bucket,
             r2_public_url,
             thumbnail_gen: Arc::new(SvgFallbackGenerator),
         }
@@ -198,6 +201,7 @@ impl MediaPublicationService {
         s3_client: S3Client,
         http: HttpClient,
         r2_bucket: String,
+        r2_transit_bucket: String,
         r2_public_url: String,
         thumbnail_gen: Arc<dyn ThumbnailGenerator>,
     ) -> Self {
@@ -206,6 +210,7 @@ impl MediaPublicationService {
             s3_client,
             http,
             r2_bucket,
+            r2_transit_bucket,
             r2_public_url,
             thumbnail_gen,
         }
@@ -279,14 +284,30 @@ impl MediaPublicationService {
 
         let response = generator_response.as_ref().ok_or(PublicationError::MissingArtifact)?;
 
-        let file_url = response
-            .get("file_url")
-            .or_else(|| response.pointer("/response/file_url"))
+        let file_url_str = if let Some(s3_key) = response
+            .get("s3_object_key")
             .and_then(|v| v.as_str())
-            .ok_or(PublicationError::MissingArtifact)?;
+        {
+            crate::storage::r2::generate_presigned_url(
+                &self.s3_client,
+                &self.r2_transit_bucket,
+                s3_key,
+                std::time::Duration::from_secs(3600),
+            )
+            .await
+            .map_err(|e| PublicationError::Upload(format!("failed to generate presigned URL: {}", e)))?
+        } else {
+            response
+                .get("presigned_url")
+                .or_else(|| response.get("file_url"))
+                .or_else(|| response.pointer("/response/file_url"))
+                .and_then(|v| v.as_str())
+                .ok_or(PublicationError::MissingArtifact)?
+                .to_string()
+        };
 
         // ── 3. Download artifact from Python renderer ────────────────────
-        let artifact_bytes = self.download_artifact(file_url).await?;
+        let artifact_bytes = self.download_artifact(&file_url_str).await?;
 
         // ── 4. Validate integrity ───────────────────────────────────────
         validate_integrity(&artifact_bytes, mime_type)?;

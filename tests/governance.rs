@@ -60,14 +60,14 @@ fn test_scope_type_eq() {
 
 #[test]
 fn test_exhausted_decision_interpret_is_deny() {
-    let d = exhausted_decision("interpret", "deepseek", "deepseek-v4-flash");
+    let d = exhausted_decision("interpret", "tencent", "hy3:free");
     assert!(!d.allowed);
     assert_eq!(d.action, ExhaustionAction::Deny);
 }
 
 #[test]
 fn test_exhausted_decision_respond_is_degrade() {
-    let d = exhausted_decision("respond", "deepseek", "deepseek-v4-flash");
+    let d = exhausted_decision("respond", "tencent", "hy3:free");
     assert!(d.allowed);
     assert_eq!(d.action, ExhaustionAction::Degrade);
 }
@@ -118,10 +118,10 @@ fn test_ledger_record_input_completed() {
         generation_id: "gen-1".to_string(),
         route: "interpret".to_string(),
         request_type: "media_prompt_interpretation".to_string(),
-        provider: "deepseek".to_string(),
-        primary_provider: "deepseek".to_string(),
-        model: "deepseek-v4-flash".to_string(),
-        requested_model: "deepseek-v4-flash".to_string(),
+        provider: "tencent".to_string(),
+        primary_provider: "tencent".to_string(),
+        model: "hy3:free".to_string(),
+        requested_model: "hy3:free".to_string(),
         latency_ms: Some(Decimal::new(1234, 2)),
         retry_count: 0,
         cache_status: CacheStatus::Miss,
@@ -130,7 +130,7 @@ fn test_ledger_record_input_completed() {
         error_code: None,
         fallback_used: false,
         fallback_reason: None,
-        attempted_providers: vec!["deepseek".to_string()],
+        attempted_providers: vec!["tencent".to_string()],
         upstream_request_id: None,
         provider_response_id: Some("resp-abc".to_string()),
         provider_model_version: None,
@@ -162,15 +162,15 @@ fn test_ledger_record_input_cache_hit() {
         cache_key: Some("hit-key".to_string()),
         latency_ms: Some(Decimal::new(500, 3)),
         retry_count: 0,
-        attempted_providers: vec!["deepseek".to_string()],
+        attempted_providers: vec!["tencent".to_string()],
         request_id: "req-hit".to_string(),
         generation_id: "gen-hit".to_string(),
         route: "interpret".to_string(),
         request_type: "media_prompt_interpretation".to_string(),
-        provider: "deepseek".to_string(),
-        primary_provider: "deepseek".to_string(),
-        model: "deepseek-v4-flash".to_string(),
-        requested_model: "deepseek-v4-flash".to_string(),
+        provider: "tencent".to_string(),
+        primary_provider: "tencent".to_string(),
+        model: "hy3:free".to_string(),
+        requested_model: "hy3:free".to_string(),
         error_class: None,
         error_code: None,
         fallback_reason: None,
@@ -193,10 +193,10 @@ fn test_ledger_record_input_failure() {
         generation_id: "gen-fail".to_string(),
         route: "respond".to_string(),
         request_type: "media_delivery_response".to_string(),
-        provider: "deepseek".to_string(),
-        primary_provider: "deepseek".to_string(),
-        model: "deepseek-v4-flash".to_string(),
-        requested_model: "deepseek-v4-flash".to_string(),
+        provider: "tencent".to_string(),
+        primary_provider: "tencent".to_string(),
+        model: "hy3:free".to_string(),
+        requested_model: "hy3:free".to_string(),
         latency_ms: None,
         retry_count: 2,
         cache_status: CacheStatus::Bypass,
@@ -205,7 +205,7 @@ fn test_ledger_record_input_failure() {
         error_code: Some("provider_unavailable".to_string()),
         fallback_used: true,
         fallback_reason: Some("primary failed".to_string()),
-        attempted_providers: vec!["deepseek".to_string(), "gemini".to_string()],
+        attempted_providers: vec!["tencent".to_string(), "gemini".to_string()],
         upstream_request_id: None,
         provider_response_id: None,
         provider_model_version: None,
@@ -242,8 +242,8 @@ fn make_price_entry(input_rate: Decimal, output_rate: Decimal) -> PriceEntry {
     use chrono::DateTime;
     PriceEntry {
         id: 1,
-        provider: "deepseek".to_string(),
-        model: "deepseek-v4-flash".to_string(),
+        provider: "tencent".to_string(),
+        model: "hy3:free".to_string(),
         input_cost_per_unit_usd: Some(input_rate),
         output_cost_per_unit_usd: Some(output_rate),
         effective_from: DateTime::from_timestamp(0, 0).unwrap(),
@@ -337,8 +337,8 @@ fn test_price_catalog_repo_type_exists() {
 fn test_price_entry_defaults() {
     let entry = PriceEntry {
         id: 1,
-        provider: "deepseek".to_string(),
-        model: "deepseek-v4-flash".to_string(),
+        provider: "tencent".to_string(),
+        model: "hy3:free".to_string(),
         input_cost_per_unit_usd: Some(Decimal::new(10, 2)),
         output_cost_per_unit_usd: Some(Decimal::new(40, 2)),
         effective_from: chrono::DateTime::from_timestamp(0, 0).unwrap(),
@@ -346,6 +346,6 @@ fn test_price_entry_defaults() {
         created_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
         updated_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
     };
-    assert_eq!(entry.provider, "deepseek");
+    assert_eq!(entry.provider, "tencent");
     assert!(entry.is_active);
 }

@@ -27,6 +27,10 @@ envVarGroups:
         sync: false
       - key: MEDIA_GEN_HMAC_SECRET
         sync: false
+      - key: MEDIA_GEN_WEBHOOK_SECRET
+        sync: false
+      - key: WEBHOOK_BASE_URL
+        sync: false
       - key: LLM_ADAPTER_FALLBACK_URL
         sync: false
 

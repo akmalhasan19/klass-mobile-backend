@@ -139,7 +139,7 @@ impl ComposeStep for MockCompose {
             "schema_version": "media_delivery_response.v1",
             "response_meta": {
                 "provider": "openrouter",
-                "model": "deepseek-v4-flash",
+                "model": "hy3:free",
                 "llm_used": true,
             },
             "fallback": { "triggered": false },

@@ -150,6 +150,7 @@ async fn run_worker(config: AppConfig) -> anyhow::Result<()> {
         state.s3_client.clone(),
         state.http.clone(),
         config.r2_bucket_name.clone(),
+        config.r2_transit_bucket_name.clone(),
         config.r2_public_url.clone(),
     ));
 
@@ -179,12 +180,12 @@ async fn run_worker(config: AppConfig) -> anyhow::Result<()> {
 
 /// Returns an error indicating the step is not yet wired.
 struct UnimplementedStep {
-    name: &'static str,
+    _name: &'static str,
 }
 
 impl UnimplementedStep {
-    const fn new(name: &'static str) -> Self {
-        Self { name }
+    const fn new(_name: &'static str) -> Self {
+        Self { _name }
     }
 }
 
