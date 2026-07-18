@@ -113,10 +113,17 @@ impl PythonMediaGeneratorClient {
     pub fn new(pool: PgPool, http: HttpClient, config: &AppConfig) -> Self {
         let signer = InterServiceRequestSigner::new(config.media_gen_hmac_secret.clone());
         let python_cfg = &config.media_generation.python;
+        // Strip trailing /v1/jobs if present — JOBS_PATH will be appended later
+        let raw_url = config.media_gen_url.trim_end_matches('/');
+        let base_url = if raw_url.ends_with(JOBS_PATH) {
+            raw_url[..raw_url.len() - JOBS_PATH.len()].trim_end_matches('/').to_string()
+        } else {
+            raw_url.to_string()
+        };
         Self {
             pool,
             http,
-            base_url: config.media_gen_url.trim_end_matches('/').to_string(),
+            base_url,
             webhook_base_url: config.webhook_base_url.trim_end_matches('/').to_string(),
             signer,
             timeout: Duration::from_secs_f64(python_cfg.timeout_seconds.max(1.0)),
