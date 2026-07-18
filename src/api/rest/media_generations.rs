@@ -11,8 +11,8 @@ use crate::db::repositories::media_generations::{
     UpdatePayloadsPayload,
 };
 use crate::error::{AppError, AppResult};
+use crate::media_gen::python_client::PythonMediaGeneratorClient;
 use crate::orchestrator::submission::{is_terminal_status, CreateInput, ProviderMetadata, SubmissionService};
-use crate::queue::redis_streams::QueueService;
 use crate::state::AppState;
 
 use super::response;
@@ -363,14 +363,22 @@ pub async fn create(
         .await
         .map_err(|e| AppError::Internal(format!("failed to pre-populate classification: {e}")))?;
 
-        // Enqueue to Redis with job_id in payload
-        if let Some(ref redis_pool) = state.redis_pool {
-            let queue = QueueService::new(redis_pool.clone(), 1);
-            if let Err(e) = queue.enqueue(&result.id.to_string(), &job_id.to_string(), 1).await {
-                tracing::warn!(error = %e, generation_id = %result.id, job_id = %job_id, "failed to enqueue media generation");
-            }
-        } else {
-            tracing::warn!("redis not available, skipping enqueue for media generation");
+        // Submit directly to Python service (fire-and-forget)
+        let python_client = PythonMediaGeneratorClient::new(
+            state.db_pool.clone(),
+            state.http.clone(),
+            &state.config,
+        );
+        if let Err(e) = python_client
+            .submit_job(&result.id.to_string(), &job_id.to_string())
+            .await
+        {
+            tracing::warn!(
+                error = %e,
+                generation_id = %result.id,
+                job_id = %job_id,
+                "failed to submit job to Python service"
+            );
         }
 
         // Return 202 Accepted with async tracking info
@@ -651,11 +659,8 @@ pub async fn regenerate(
         .await
         .map_err(|e| AppError::Internal(format!("failed to create regeneration: {e}")))?;
 
-    // Enqueue the new generation with async job tracking
-    if let Some(ref redis_pool) = state.redis_pool {
-        let queue = QueueService::new(redis_pool.clone(), 1);
-
-        // Generate job_id for regeneration too
+    // Submit directly to Python service (fire-and-forget)
+    {
         let job_id = Uuid::new_v4();
 
         // Update DB with job_id and status='pending'
@@ -671,11 +676,22 @@ pub async fn regenerate(
             tracing::warn!(error = %e, generation_id = %new_id, "failed to set regeneration job status");
         }
 
-        if let Err(e) = queue.enqueue(&new_id.to_string(), &job_id.to_string(), 1).await {
-            tracing::warn!(error = %e, generation_id = %new_id, "failed to enqueue regeneration");
+        let python_client = PythonMediaGeneratorClient::new(
+            state.db_pool.clone(),
+            state.http.clone(),
+            &state.config,
+        );
+        if let Err(e) = python_client
+            .submit_job(&new_id.to_string(), &job_id.to_string())
+            .await
+        {
+            tracing::warn!(
+                error = %e,
+                generation_id = %new_id,
+                job_id = %job_id,
+                "failed to submit regeneration job to Python service"
+            );
         }
-    } else {
-        tracing::warn!("redis not available, skipping enqueue for regeneration");
     }
 
     // Fetch the newly created regeneration
