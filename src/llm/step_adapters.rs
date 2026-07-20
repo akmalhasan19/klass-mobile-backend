@@ -262,7 +262,7 @@ impl DraftStep for DraftStepAdapter {
         sqlx::query(
             r#"
             UPDATE media_generations
-            SET generation_spec_payload = COALESCE(generation_spec_payload, $1::jsonb),
+            SET generation_spec_payload = COALESCE(generation_spec_payload::jsonb, $1::jsonb),
                 updated_at = NOW()
             WHERE id = $2
             "#,
