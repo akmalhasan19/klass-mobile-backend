@@ -63,22 +63,43 @@ async fn main() -> anyhow::Result<()> {
     if is_worker {
         run_worker(config).await
     } else {
-        run_server(config).await
+        run_server_with_worker(config).await
     }
 }
 
-// ─── Server mode ────────────────────────────────────────────────────────────
+// ─── Server mode (with embedded worker) ───────────────────────────────────
 
-async fn run_server(config: AppConfig) -> anyhow::Result<()> {
+/// Default mode: runs both the REST API server and the media generation
+/// worker in a single process. The worker is spawned as a background task
+/// so no separate Background Worker service is needed on Render (or similar
+/// platforms).
+///
+/// Use `--worker` to run a standalone worker process (backward compat).
+async fn run_server_with_worker(config: AppConfig) -> anyhow::Result<()> {
     info!(
         host = %config.host,
         port = %config.port,
         grpc_port = %config.grpc_port,
-        "Starting Klass Gateway (server mode)"
+        "Starting Klass Gateway (server + embedded worker)"
     );
 
     let state = AppState::new(config.clone()).await?;
 
+    // ── Spawn embedded worker in background ────────────────────────────────
+    if state.redis_pool.is_some() {
+        let worker_config = config.clone();
+        let worker_state = state.clone();
+        tokio::spawn(async move {
+            if let Err(e) = run_embedded_worker(worker_config, worker_state).await {
+                tracing::error!(error = %e, "Embedded worker exited with error");
+            }
+        });
+        info!("Embedded worker spawned as background task");
+    } else {
+        tracing::warn!("REDIS_URL not configured — embedded worker disabled");
+    }
+
+    // ── Run REST server (foreground) ────────────────────────────────────────
     let cors = build_cors_layer(&config.cors_allowed_origins);
 
     let swagger: Router<AppState> = SwaggerUi::new("/api-docs/swagger-ui")
@@ -126,10 +147,122 @@ async fn run_server(config: AppConfig) -> anyhow::Result<()> {
     Ok(())
 }
 
-// ─── Worker mode ────────────────────────────────────────────────────────────
+/// Run the embedded worker using an existing AppState (shared pool/redis).
+///
+/// This is a slimmer version of `run_worker` that reuses the AppState
+/// created by the server, avoiding a second DB/Redis connection pool.
+async fn run_embedded_worker(config: AppConfig, state: AppState) -> anyhow::Result<()> {
+    info!("Embedded worker starting event loop");
 
+    let redis_pool = state.redis_pool.ok_or_else(|| {
+        anyhow::anyhow!("REDIS_URL is required for embedded worker")
+    })?;
+
+    let concurrency = config.media_generation.queue.concurrency as usize;
+    let consumer_name = format!("{}-{}", CONSUMER_PREFIX, hostname());
+
+    let worker = Worker::new(
+        redis_pool.clone(),
+        state.db_pool.clone(),
+        consumer_name,
+        concurrency,
+    );
+
+    // ── Build shared LLM infrastructure ──────────────────────────────────
+    let pool = state.db_pool.clone();
+
+    let or_config = OpenRouterConfig::from_app_config(&config);
+    let openrouter_client = OpenRouterProviderClient::new(state.http.clone(), or_config.clone());
+    let provider_router = Arc::new(ProviderRouter::new(Box::new(openrouter_client)));
+
+    // ── Build LLM services ──────────────────────────────────────────────
+    let interpret_service = InterpretService::new(
+        LlmCacheRepo::new(pool.clone()),
+        LedgerRepo::new(pool.clone()),
+        PriceCatalogRepo::new(pool.clone()),
+        RateLimitPoliciesRepo::new(pool.clone()),
+        RateLimitBucketsRepo::new(pool.clone()),
+        provider_router.clone(),
+        state.taxonomy.clone(),
+        or_config.model.clone(),
+        klass_gateway::llm::interpret::DEFAULT_INTERPRET_INSTRUCTION.to_string(),
+    );
+
+    let draft_service = DraftService::new(
+        LlmCacheRepo::new(pool.clone()),
+        LedgerRepo::new(pool.clone()),
+        PriceCatalogRepo::new(pool.clone()),
+        RateLimitPoliciesRepo::new(pool.clone()),
+        RateLimitBucketsRepo::new(pool.clone()),
+        provider_router.clone(),
+        or_config.model.clone(),
+        klass_gateway::llm::draft::DEFAULT_DRAFT_INSTRUCTION.to_string(),
+    );
+
+    let respond_service = RespondService::new(
+        LlmCacheRepo::new(pool.clone()),
+        LedgerRepo::new(pool.clone()),
+        PriceCatalogRepo::new(pool.clone()),
+        RateLimitPoliciesRepo::new(pool.clone()),
+        RateLimitBucketsRepo::new(pool.clone()),
+        provider_router.clone(),
+        or_config.model.clone(),
+        klass_gateway::llm::respond::DEFAULT_RESPOND_INSTRUCTION.to_string(),
+    );
+
+    // ── Build step adapters ─────────────────────────────────────────────
+    let interpret: Arc<dyn InterpretStep> = Arc::new(InterpretStepAdapter::new(pool.clone(), interpret_service));
+    let draft: Arc<dyn DraftStep> = Arc::new(DraftStepAdapter::new(pool.clone(), draft_service));
+    let compose: Arc<dyn ComposeStep> = Arc::new(ComposeStepAdapter::new(pool.clone(), respond_service));
+
+    let generate = Arc::new(PythonMediaGeneratorClient::new(
+        pool.clone(),
+        state.http.clone(),
+        &config,
+    ));
+
+    let publish = Arc::new(MediaPublicationService::new(
+        pool.clone(),
+        state.s3_client.clone(),
+        state.http.clone(),
+        config.r2_bucket_name.clone(),
+        config.r2_transit_bucket_name.clone(),
+        config.r2_public_url.clone(),
+    ));
+
+    let workflow = klass_gateway::orchestrator::workflow::WorkflowService::new(
+        pool.clone(),
+    );
+
+    info!(
+        concurrency = concurrency,
+        model = %or_config.model,
+        "Embedded worker starting event loop with LLM pipeline wired"
+    );
+
+    worker
+        .run(
+            &workflow,
+            interpret,
+            draft,
+            generate,
+            publish,
+            compose,
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("Embedded worker exited with error: {e}"))
+}
+
+// ─── Standalone Worker mode (--worker flag) ──────────────────────────────────
+
+/// Standalone worker mode: runs only the media generation worker without
+/// the REST server. Use this when deploying a separate Background Worker
+/// service on Render (or similar platforms).
+///
+/// In most cases you should prefer the default `run_server_with_worker`
+/// mode which embeds the worker as a background task.
 async fn run_worker(config: AppConfig) -> anyhow::Result<()> {
-    info!("Starting Klass Gateway (worker mode)");
+    info!("Starting Klass Gateway (standalone worker mode)");
 
     let state = AppState::new(config.clone()).await?;
 
