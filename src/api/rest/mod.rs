@@ -1,6 +1,7 @@
 pub mod admin;
 pub mod auth;
 pub mod avatar;
+pub mod clarification;
 pub mod contents;
 pub mod freelancer;
 pub mod gallery;
@@ -48,9 +49,12 @@ pub fn api_router() -> Router<AppState> {
 
     let media_generation_routes = Router::new()
         .route("/", get(media_generations::index).post(media_generations::create))
+        .route("/preflight", post(clarification::preflight))
+        .route("/confirm", post(clarification::confirm))
         .route("/{id}/job-status", get(media_generations::job_status))
         .route("/{id}", get(media_generations::show))
         .route("/{id}/regenerate", post(media_generations::regenerate))
+        .route("/{id}/skip-clarification", post(clarification::skip_clarification))
         .route("/{id}/suggest-freelancers", post(freelancer::suggest_freelancers))
         .route("/{id}/hire-freelancer", post(freelancer::hire_freelancer));
 

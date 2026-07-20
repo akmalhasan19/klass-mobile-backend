@@ -16,6 +16,7 @@
 //! - [`ProviderRouter`](crate::providers::ProviderRouter) for primary/fallback provider selection
 //! - Contract schemas from [`crate::contracts`] for decode-validate-fallback
 
-pub mod interpret;
+pub mod clarification;
 pub mod draft;
+pub mod interpret;
 pub mod respond;

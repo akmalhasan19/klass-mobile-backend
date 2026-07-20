@@ -1,0 +1,459 @@
+   Compiling aws-lc-sys v0.42.0
+   Compiling prost-derive v0.13.5
+   Compiling sqlx-postgres v0.8.6
+   Compiling reqwest v0.12.28
+   Compiling utoipa-gen v5.5.0
+   Compiling axum-macros v0.5.1
+    Checking whoami v1.6.1
+    Checking sha1_smol v1.0.1
+    Checking minimal-lexical v0.2.1
+    Checking dotenvy v0.15.7
+    Checking arraydeque v0.5.1
+warning: aws-lc-sys@0.42.0: Environment Variable found 'CARGO_ENCODED_RUSTFLAGS': ''
+warning: aws-lc-sys@0.42.0: Emitting configuration: cargo:rustc-cfg=universal
+warning: aws-lc-sys@0.42.0: Building with: CC
+warning: aws-lc-sys@0.42.0: Symbol Prefix: Some("aws_lc_0_42_0")
+warning: aws-lc-sys@0.42.0: Target platform: 'x86_64-pc-windows-msvc'
+warning: aws-lc-sys@0.42.0: Compilation of 'stdalign_check.c' failed - Err(Error { kind: ToolExecError, message: "command did not execute successfully (status code exit code: 2): \"C:\\\\Program Files (x86)\\\\Microsoft Visual Studio\\\\18\\\\BuildTools\\\\VC\\\\Tools\\\\MSVC\\\\14.51.36231\\\\bin\\\\HostX64\\\\x64\\\\cl.exe\" \"-nologo\" \"-MD\" \"-O2\" \"-Z7\" \"-Brepro\" \"-WX\" \"-W4\" \"-FoC:\\\\Users\\\\user\\\\KLASS-~1\\\\gateway\\\\target\\\\debug\\\\build\\\\AWS-LC~4\\\\out\\\\out-stdalign_check\\\\60dd54bcacffee02-stdalign_check.o\" \"-c\" \"C:\\\\Users\\\\user\\\\CARGO~1\\\\registry\\\\src\\\\INDEXC~1.IO-\\\\AWS-LC~1.0\\\\aws-lc\\\\tests\\\\compiler_features_tests\\\\stdalign_check.c\"" }).
+warning: aws-lc-sys@0.42.0: cl : Command line warning D9025 : overriding '/O2' with '/Od'
+warning: aws-lc-sys@0.42.0: cl : Command line warning D9025 : overriding '/O2' with '/Od'
+warning: aws-lc-sys@0.42.0: cl : Command line warning D9025 : overriding '/O2' with '/Od'
+warning: aws-lc-sys@0.42.0: cl : Command line warning D9025 : overriding '/O2' with '/Od'
+error: failed to run custom build command for `aws-lc-sys v0.42.0`
+
+Caused by:
+  process didn't exit successfully: `C:\Users\user\klass-mobile\gateway\target\debug\build\aws-lc-sys-617fa082b3144cfb\build-script-main` (exit code: 1)
+  --- stdout
+  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_PREFIX_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_PREFIX
+  cargo:rerun-if-env-changed=AWS_LC_SYS_PREGENERATING_BINDINGS_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_PREGENERATING_BINDINGS
+  cargo:rerun-if-env-changed=AWS_LC_SYS_EXTERNAL_BINDGEN_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_EXTERNAL_BINDGEN
+  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_ASM_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_ASM
+  cargo:rerun-if-env-changed=AWS_LC_SYS_PREBUILT_NASM_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_PREBUILT_NASM
+  cargo:rerun-if-env-changed=AWS_LC_SYS_C_STD_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_C_STD
+  cargo:rerun-if-env-changed=AWS_LC_SYS_CMAKE_BUILDER_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_CMAKE_BUILDER
+  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_PREGENERATED_SRC_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_PREGENERATED_SRC
+  cargo:rerun-if-env-changed=AWS_LC_SYS_EFFECTIVE_TARGET_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_EFFECTIVE_TARGET
+  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_JITTER_ENTROPY_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_JITTER_ENTROPY
+  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_U1_BINDINGS_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_U1_BINDINGS
+  cargo:rerun-if-env-changed=AWS_LC_SYS_INCLUDES_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_INCLUDES
+  cargo:rerun-if-env-changed=AWS_LC_SYS_SANITIZER_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_SANITIZER
+  cargo:rerun-if-env-changed=AWS_LC_SYS_LINK_WHOLE_ARCHIVE_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_LINK_WHOLE_ARCHIVE
+  cargo:rerun-if-env-changed=AWS_LC_SYS_STATIC_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_STATIC
+  cargo:rerun-if-env-changed=AWS_LC_SYS_SYSTEM_DIR_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_SYSTEM_DIR
+  cargo:rerun-if-env-changed=AWS_LC_SYS_USE_SYSTEM_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_USE_SYSTEM
+  cargo:rerun-if-env-changed=AWS_LC_SYS_SYSTEM_BINDINGS_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_SYSTEM_BINDINGS
+  cargo:rerun-if-env-changed=AWS_LC_SYS_SYSTEM_SKIP_VERSION_CHECK_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_SYSTEM_SKIP_VERSION_CHECK
+  cargo:rerun-if-env-changed=CARGO_ENCODED_RUSTFLAGS
+  cargo:warning=Environment Variable found 'CARGO_ENCODED_RUSTFLAGS': ''
+  cargo:warning=Emitting configuration: cargo:rustc-cfg=universal
+  cargo:rustc-cfg=universal
+  cargo:rerun-if-env-changed=OPENSSL_DIR_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=OPENSSL_DIR
+  cargo:rerun-if-env-changed=OPENSSL_INCLUDE_DIR_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=OPENSSL_INCLUDE_DIR
+  cargo:rerun-if-env-changed=OPENSSL_LIB_DIR_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=OPENSSL_LIB_DIR
+  cargo:rerun-if-env-changed=CARGO_FEATURE_SSL
+  cargo:warning=Building with: CC
+  cargo:warning=Symbol Prefix: Some("aws_lc_0_42_0")
+  cargo:rerun-if-env-changed=CARGO_FEATURE_SSL
+  cargo:warning=Target platform: 'x86_64-pc-windows-msvc'
+  cargo:root=C:\Users\user\KLASS-~1\gateway\target\debug\build\AWS-LC~4\out
+  cargo:rerun-if-env-changed=AWS_LC_SYS_TARGET_CFLAGS_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_TARGET_CFLAGS
+  cargo:rerun-if-env-changed=TARGET_CFLAGS_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=TARGET_CFLAGS
+  cargo:rerun-if-env-changed=AWS_LC_SYS_CFLAGS_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_CFLAGS
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=CFLAGS
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(C:\Users\user\klass-mobile\gateway\target\debug\deps;C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib\rustlib\x86_64-pc-windows-msvc\lib;C:\laragon\bin\php\php-8.3.29-Win32-vs16-x64;C:\Users\user\anaconda3;C:\Users\user\anaconda3\Library\mingw-w64\bin;C:\Users\user\anaconda3\Library\usr\bin;C:\Users\user\anaconda3\Library\bin;C:\Users\user\anaconda3\Scripts;C:\Users\user\anaconda3\bin;C:\Users\user\anaconda3\condabin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\WSL;C:\Program Files\nodejs;C:\Program Files\Git\cmd;C:\Program Files\dotnet;C:\flutter\bin;C:\Users\user\.cargo\bin;C:\Users\user\AppData\Local\Microsoft\WindowsApps;C:\Users\user\AppData\Local\Programs\Antigravity IDE\bin;C:\Users\user\AppData\Roaming\npm;C:\Users\user\.dotnet\tools;C:\flutter\bin;.;C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(C:\Users\user\klass-mobile\gateway\target\debug\deps;C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib\rustlib\x86_64-pc-windows-msvc\lib;C:\laragon\bin\php\php-8.3.29-Win32-vs16-x64;C:\Users\user\anaconda3;C:\Users\user\anaconda3\Library\mingw-w64\bin;C:\Users\user\anaconda3\Library\usr\bin;C:\Users\user\anaconda3\Library\bin;C:\Users\user\anaconda3\Scripts;C:\Users\user\anaconda3\bin;C:\Users\user\anaconda3\condabin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\WSL;C:\Program Files\nodejs;C:\Program Files\Git\cmd;C:\Program Files\dotnet;C:\flutter\bin;C:\Users\user\.cargo\bin;C:\Users\user\AppData\Local\Microsoft\WindowsApps;C:\Users\user\AppData\Local\Programs\Antigravity IDE\bin;C:\Users\user\AppData\Roaming\npm;C:\Users\user\.dotnet\tools;C:\flutter\bin;.;C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=AWS_LC_SYS_TARGET_CC_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_TARGET_CC
+  cargo:rerun-if-env-changed=TARGET_CC_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=TARGET_CC
+  cargo:rerun-if-env-changed=AWS_LC_SYS_CC_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_CC
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=CC
+  cargo:rerun-if-env-changed=AWS_LC_SYS_TARGET_CXX_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_TARGET_CXX
+  cargo:rerun-if-env-changed=TARGET_CXX_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=TARGET_CXX
+  cargo:rerun-if-env-changed=AWS_LC_SYS_CXX_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_CXX
+  cargo:rerun-if-env-changed=CXX_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=CXX
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(C:\Users\user\klass-mobile\gateway\target\debug\deps;C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib\rustlib\x86_64-pc-windows-msvc\lib;C:\laragon\bin\php\php-8.3.29-Win32-vs16-x64;C:\Users\user\anaconda3;C:\Users\user\anaconda3\Library\mingw-w64\bin;C:\Users\user\anaconda3\Library\usr\bin;C:\Users\user\anaconda3\Library\bin;C:\Users\user\anaconda3\Scripts;C:\Users\user\anaconda3\bin;C:\Users\user\anaconda3\condabin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\WSL;C:\Program Files\nodejs;C:\Program Files\Git\cmd;C:\Program Files\dotnet;C:\flutter\bin;C:\Users\user\.cargo\bin;C:\Users\user\AppData\Local\Microsoft\WindowsApps;C:\Users\user\AppData\Local\Programs\Antigravity IDE\bin;C:\Users\user\AppData\Roaming\npm;C:\Users\user\.dotnet\tools;C:\flutter\bin;.;C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_FORCE_DISABLE
+  CC_FORCE_DISABLE = None
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(C:\Users\user\klass-mobile\gateway\target\debug\deps;C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib\rustlib\x86_64-pc-windows-msvc\lib;C:\laragon\bin\php\php-8.3.29-Win32-vs16-x64;C:\Users\user\anaconda3;C:\Users\user\anaconda3\Library\mingw-w64\bin;C:\Users\user\anaconda3\Library\usr\bin;C:\Users\user\anaconda3\Library\bin;C:\Users\user\anaconda3\Scripts;C:\Users\user\anaconda3\bin;C:\Users\user\anaconda3\condabin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\WSL;C:\Program Files\nodejs;C:\Program Files\Git\cmd;C:\Program Files\dotnet;C:\flutter\bin;C:\Users\user\.cargo\bin;C:\Users\user\AppData\Local\Microsoft\WindowsApps;C:\Users\user\AppData\Local\Programs\Antigravity IDE\bin;C:\Users\user\AppData\Roaming\npm;C:\Users\user\.dotnet\tools;C:\flutter\bin;.;C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+  stdalign_check.c
+  C:\Users\user\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(13): error C2220: the following warning is treated as an error
+  C:\Users\user\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(13): warning C4013: 'alignas' undefined; assuming extern returning int
+  C:\Users\user\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(13): error C2146: syntax error: missing ';' before identifier 'uint8_t'
+  C:\Users\user\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(13): error C2275: 'uint8_t': expected an expression instead of a type
+  C:\Users\user\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(13): error C2146: syntax error: missing ';' before identifier 'test'
+  C:\Users\user\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(13): error C2065: 'test': undeclared identifier
+  C:\Users\user\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(13): error C2109: subscript requires array or pointer type
+  C:\Users\user\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(14): warning C4013: 'alignof' undefined; assuming extern returning int
+  C:\Users\user\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(14): error C2275: 'uint8_t': expected an expression instead of a type
+  C:\Users\user\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(16): error C2065: 'test': undeclared identifier
+  C:\Users\user\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(16): error C2109: subscript requires array or pointer type
+  C:\Users\user\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(19): error C2065: 'test': undeclared identifier
+  C:\Users\user\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(19): error C2109: subscript requires array or pointer type
+  cargo:warning=Compilation of 'stdalign_check.c' failed - Err(Error { kind: ToolExecError, message: "command did not execute successfully (status code exit code: 2): \"C:\\\\Program Files (x86)\\\\Microsoft Visual Studio\\\\18\\\\BuildTools\\\\VC\\\\Tools\\\\MSVC\\\\14.51.36231\\\\bin\\\\HostX64\\\\x64\\\\cl.exe\" \"-nologo\" \"-MD\" \"-O2\" \"-Z7\" \"-Brepro\" \"-WX\" \"-W4\" \"-FoC:\\\\Users\\\\user\\\\KLASS-~1\\\\gateway\\\\target\\\\debug\\\\build\\\\AWS-LC~4\\\\out\\\\out-stdalign_check\\\\60dd54bcacffee02-stdalign_check.o\" \"-c\" \"C:\\\\Users\\\\user\\\\CARGO~1\\\\registry\\\\src\\\\INDEXC~1.IO-\\\\AWS-LC~1.0\\\\aws-lc\\\\tests\\\\compiler_features_tests\\\\stdalign_check.c\"" }).
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(C:\Users\user\klass-mobile\gateway\target\debug\deps;C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib\rustlib\x86_64-pc-windows-msvc\lib;C:\laragon\bin\php\php-8.3.29-Win32-vs16-x64;C:\Users\user\anaconda3;C:\Users\user\anaconda3\Library\mingw-w64\bin;C:\Users\user\anaconda3\Library\usr\bin;C:\Users\user\anaconda3\Library\bin;C:\Users\user\anaconda3\Scripts;C:\Users\user\anaconda3\bin;C:\Users\user\anaconda3\condabin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\WSL;C:\Program Files\nodejs;C:\Program Files\Git\cmd;C:\Program Files\dotnet;C:\flutter\bin;C:\Users\user\.cargo\bin;C:\Users\user\AppData\Local\Microsoft\WindowsApps;C:\Users\user\AppData\Local\Programs\Antigravity IDE\bin;C:\Users\user\AppData\Roaming\npm;C:\Users\user\.dotnet\tools;C:\flutter\bin;.;C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(C:\Users\user\klass-mobile\gateway\target\debug\deps;C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib\rustlib\x86_64-pc-windows-msvc\lib;C:\laragon\bin\php\php-8.3.29-Win32-vs16-x64;C:\Users\user\anaconda3;C:\Users\user\anaconda3\Library\mingw-w64\bin;C:\Users\user\anaconda3\Library\usr\bin;C:\Users\user\anaconda3\Library\bin;C:\Users\user\anaconda3\Scripts;C:\Users\user\anaconda3\bin;C:\Users\user\anaconda3\condabin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\WSL;C:\Program Files\nodejs;C:\Program Files\Git\cmd;C:\Program Files\dotnet;C:\flutter\bin;C:\Users\user\.cargo\bin;C:\Users\user\AppData\Local\Microsoft\WindowsApps;C:\Users\user\AppData\Local\Programs\Antigravity IDE\bin;C:\Users\user\AppData\Roaming\npm;C:\Users\user\.dotnet\tools;C:\flutter\bin;.;C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_FORCE_DISABLE
+  CC_FORCE_DISABLE = None
+  cargo:rerun-if-env-changed=CC_FORCE_DISABLE
+  CC_FORCE_DISABLE = None
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(C:\Users\user\klass-mobile\gateway\target\debug\deps;C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib\rustlib\x86_64-pc-windows-msvc\lib;C:\laragon\bin\php\php-8.3.29-Win32-vs16-x64;C:\Users\user\anaconda3;C:\Users\user\anaconda3\Library\mingw-w64\bin;C:\Users\user\anaconda3\Library\usr\bin;C:\Users\user\anaconda3\Library\bin;C:\Users\user\anaconda3\Scripts;C:\Users\user\anaconda3\bin;C:\Users\user\anaconda3\condabin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\WSL;C:\Program Files\nodejs;C:\Program Files\Git\cmd;C:\Program Files\dotnet;C:\flutter\bin;C:\Users\user\.cargo\bin;C:\Users\user\AppData\Local\Microsoft\WindowsApps;C:\Users\user\AppData\Local\Programs\Antigravity IDE\bin;C:\Users\user\AppData\Roaming\npm;C:\Users\user\.dotnet\tools;C:\flutter\bin;.;C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(C:\Users\user\klass-mobile\gateway\target\debug\deps;C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib\rustlib\x86_64-pc-windows-msvc\lib;C:\laragon\bin\php\php-8.3.29-Win32-vs16-x64;C:\Users\user\anaconda3;C:\Users\user\anaconda3\Library\mingw-w64\bin;C:\Users\user\anaconda3\Library\usr\bin;C:\Users\user\anaconda3\Library\bin;C:\Users\user\anaconda3\Scripts;C:\Users\user\anaconda3\bin;C:\Users\user\anaconda3\condabin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\WSL;C:\Program Files\nodejs;C:\Program Files\Git\cmd;C:\Program Files\dotnet;C:\flutter\bin;C:\Users\user\.cargo\bin;C:\Users\user\AppData\Local\Microsoft\WindowsApps;C:\Users\user\AppData\Local\Programs\Antigravity IDE\bin;C:\Users\user\AppData\Roaming\npm;C:\Users\user\.dotnet\tools;C:\flutter\bin;.;C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  jitterentropy-base.c
+  cargo:warning=cl : Command line warning D9025 : overriding '/O2' with '/Od'
+  cargo:warning=cl : Command line warning D9025 : overriding '/O2' with '/Od'
+  
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(C:\Users\user\klass-mobile\gateway\target\debug\deps;C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib\rustlib\x86_64-pc-windows-msvc\lib;C:\laragon\bin\php\php-8.3.29-Win32-vs16-x64;C:\Users\user\anaconda3;C:\Users\user\anaconda3\Library\mingw-w64\bin;C:\Users\user\anaconda3\Library\usr\bin;C:\Users\user\anaconda3\Library\bin;C:\Users\user\anaconda3\Scripts;C:\Users\user\anaconda3\bin;C:\Users\user\anaconda3\condabin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\WSL;C:\Program Files\nodejs;C:\Program Files\Git\cmd;C:\Program Files\dotnet;C:\flutter\bin;C:\Users\user\.cargo\bin;C:\Users\user\AppData\Local\Microsoft\WindowsApps;C:\Users\user\AppData\Local\Programs\Antigravity IDE\bin;C:\Users\user\AppData\Roaming\npm;C:\Users\user\.dotnet\tools;C:\flutter\bin;.;C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  cargo:warning=cl : Command line warning D9025 : overriding '/O2' with '/Od'
+  cargo:warning=cl : Command line warning D9025 : overriding '/O2' with '/Od'
+  
+  jitterentropy-gcd.c
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `prost-derive` (lib)
+
+Caused by:
+  process didn't exit successfully: `C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\rustc.exe --crate-name prost_derive --edition=2021 C:\Users\user\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\prost-derive-0.13.5\src\lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type proc-macro --emit=dep-info,link -C prefer-dynamic -C opt-level=2 -C embed-bitcode=no -C debug-assertions=on --check-cfg cfg(docsrs,test) --check-cfg "cfg(feature, values())" -C metadata=e4f09fbcdcf4dda7 -C extra-filename=-c5df4a739c7520f5 --out-dir C:\Users\user\klass-mobile\gateway\target\debug\deps -L dependency=C:\Users\user\klass-mobile\gateway\target\debug\deps --extern anyhow=C:\Users\user\klass-mobile\gateway\target\debug\deps\libanyhow-9d0aabbbea772ce1.rlib --extern itertools=C:\Users\user\klass-mobile\gateway\target\debug\deps\libitertools-0e6f6b25e0cf90ec.rlib --extern proc_macro2=C:\Users\user\klass-mobile\gateway\target\debug\deps\libproc_macro2-e20f241d386a08f4.rlib --extern quote=C:\Users\user\klass-mobile\gateway\target\debug\deps\libquote-ba9a18fa207ddb2d.rlib --extern syn=C:\Users\user\klass-mobile\gateway\target\debug\deps\libsyn-91d681a9a7ba72e0.rlib --extern proc_macro --cap-lints allow` (exit code: 1)
+error: could not compile `reqwest` (lib)
+
+Caused by:
+  process didn't exit successfully: `C:\Users\user\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\rustc.exe --crate-name reqwest --edition=2021 C:\Users\user\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\reqwest-0.12.28\src\lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C opt-level=2 -C embed-bitcode=no --warn=unexpected_cfgs --check-cfg cfg(reqwest_unstable) -C debug-assertions=on --cfg "feature=\"__rustls\"" --cfg "feature=\"__rustls-ring\"" --cfg "feature=\"__tls\"" --cfg "feature=\"blocking\"" --cfg "feature=\"rustls-tls\"" --cfg "feature=\"rustls-tls-webpki-roots\"" --cfg "feature=\"rustls-tls-webpki-roots-no-provider\"" --check-cfg cfg(docsrs,test) --check-cfg "cfg(feature, values(\"__rustls\", \"__rustls-ring\", \"__tls\", \"blocking\", \"brotli\", \"charset\", \"cookies\", \"default\", \"default-tls\", \"deflate\", \"gzip\", \"h2\", \"hickory-dns\", \"http2\", \"http3\", \"json\", \"macos-system-configuration\", \"multipart\", \"native-tls\", \"native-tls-alpn\", \"native-tls-vendored\", \"rustls-tls\", \"rustls-tls-manual-roots\", \"rustls-tls-manual-roots-no-provider\", \"rustls-tls-native-roots\", \"rustls-tls-native-roots-no-provider\", \"rustls-tls-no-provider\", \"rustls-tls-webpki-roots\", \"rustls-tls-webpki-roots-no-provider\", \"socks\", \"stream\", \"system-proxy\", \"trust-dns\", \"zstd\"))" -C metadata=94e4edd250ebede0 -C extra-filename=-5a537d0d3f05f30e --out-dir C:\Users\user\klass-mobile\gateway\target\debug\deps -L dependency=C:\Users\user\klass-mobile\gateway\target\debug\deps --extern base64=C:\Users\user\klass-mobile\gateway\target\debug\deps\libbase64-83a934101741a876.rmeta --extern bytes=C:\Users\user\klass-mobile\gateway\target\debug\deps\libbytes-afdfb406d1e04684.rmeta --extern futures_channel=C:\Users\user\klass-mobile\gateway\target\debug\deps\libfutures_channel-a0613c77078a9f80.rmeta --extern futures_core=C:\Users\user\klass-mobile\gateway\target\debug\deps\libfutures_core-bc818ca91de0619f.rmeta --extern futures_util=C:\Users\user\klass-mobile\gateway\target\debug\deps\libfutures_util-8511d7a03038ed1b.rmeta --extern http=C:\Users\user\klass-mobile\gateway\target\debug\deps\libhttp-b627f19a50367718.rmeta --extern http_body=C:\Users\user\klass-mobile\gateway\target\debug\deps\libhttp_body-a36598cc8936556c.rmeta --extern http_body_util=C:\Users\user\klass-mobile\gateway\target\debug\deps\libhttp_body_util-7346e387d3dc6d07.rmeta --extern hyper=C:\Users\user\klass-mobile\gateway\target\debug\deps\libhyper-1cdcd88518ac0ffa.rmeta --extern hyper_rustls=C:\Users\user\klass-mobile\gateway\target\debug\deps\libhyper_rustls-62aef073a1dd1432.rmeta --extern hyper_util=C:\Users\user\klass-mobile\gateway\target\debug\deps\libhyper_util-e249ab8397efd456.rmeta --extern log=C:\Users\user\klass-mobile\gateway\target\debug\deps\liblog-760a61269cdb35ea.rmeta --extern percent_encoding=C:\Users\user\klass-mobile\gateway\target\debug\deps\libpercent_encoding-0efbbf998e49e83a.rmeta --extern pin_project_lite=C:\Users\user\klass-mobile\gateway\target\debug\deps\libpin_project_lite-7a8c5fa7cce1157e.rmeta --extern rustls=C:\Users\user\klass-mobile\gateway\target\debug\deps\librustls-7ec9dcc5846f065a.rmeta --extern rustls_pki_types=C:\Users\user\klass-mobile\gateway\target\debug\deps\librustls_pki_types-38036a7106551d4d.rmeta --extern serde=C:\Users\user\klass-mobile\gateway\target\debug\deps\libserde-a5fedcb29405a26f.rmeta --extern serde_urlencoded=C:\Users\user\klass-mobile\gateway\target\debug\deps\libserde_urlencoded-c139ab715aefa6b1.rmeta --extern sync_wrapper=C:\Users\user\klass-mobile\gateway\target\debug\deps\libsync_wrapper-cc9761cb1afa8d2b.rmeta --extern tokio=C:\Users\user\klass-mobile\gateway\target\debug\deps\libtokio-6d810fb42c7255b4.rmeta --extern tokio_rustls=C:\Users\user\klass-mobile\gateway\target\debug\deps\libtokio_rustls-d2d2b59f9bcb9808.rmeta --extern tower=C:\Users\user\klass-mobile\gateway\target\debug\deps\libtower-cab48e9d3eaaa9e2.rmeta --extern tower_http=C:\Users\user\klass-mobile\gateway\target\debug\deps\libtower_http-278beb37300b0bdc.rmeta --extern tower_service=C:\Users\user\klass-mobile\gateway\target\debug\deps\libtower_service-8ab58f2b0e987cf5.rmeta --extern url=C:\Users\user\klass-mobile\gateway\target\debug\deps\liburl-8881175e287dbb29.rmeta --extern webpki_roots=C:\Users\user\klass-mobile\gateway\target\debug\deps\libwebpki_roots-a799b426ceccce98.rmeta --cap-lints allow -L native=C:\Users\user\klass-mobile\gateway\target\debug\build\ring-cfc02afb1b970914\out` (exit code: 1)

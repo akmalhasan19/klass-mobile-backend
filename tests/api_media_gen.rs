@@ -400,3 +400,273 @@ async fn test_media_gen_forbidden_for_non_teacher() {
         .execute(&ctx.pool)
         .await;
 }
+
+// ─── Clarification flow tests (Phase 2) ─────────────────────────────────────
+
+#[tokio::test]
+async fn test_preflight_returns_200_with_gaps() {
+    let ctx = match common::setup().await {
+        Some(ctx) => ctx,
+        None => {
+            eprintln!("SKIP: DATABASE_URL not set or connection failed");
+            return;
+        }
+    };
+
+    let teacher = seed_teacher(&ctx.pool).await;
+
+    let body = serde_json::json!({
+        "raw_prompt": "Buatkan materi tentang pecahan"
+    });
+
+    let (status, json) =
+        post_json(&ctx.app, "/api/v1/media-generations/preflight", &teacher.token, &body).await;
+    assert_eq!(status, StatusCode::OK, "Expected 200, got: {json}");
+    assert_eq!(json["success"], true);
+    assert!(json["data"]["generation_id"].as_str().is_some());
+    assert!(json["data"]["gaps"].as_array().is_some());
+    assert!(json["data"]["is_ready"].as_bool().is_some());
+
+    cleanup_teacher(&ctx.pool, teacher.user_id).await;
+}
+
+#[tokio::test]
+async fn test_preflight_ready_when_all_required_present() {
+    let ctx = match common::setup().await {
+        Some(ctx) => ctx,
+        None => {
+            eprintln!("SKIP: DATABASE_URL not set or connection failed");
+            return;
+        }
+    };
+
+    let teacher = seed_teacher(&ctx.pool).await;
+
+    let body = serde_json::json!({
+        "raw_prompt": "Buatkan materi pecahan untuk kelas 5 SD format PDF",
+        "preferred_output_type": "pdf",
+        "subject_id": 1
+    });
+
+    let (status, json) =
+        post_json(&ctx.app, "/api/v1/media-generations/preflight", &teacher.token, &body).await;
+    assert_eq!(status, StatusCode::OK, "Expected 200, got: {json}");
+    assert_eq!(json["data"]["is_ready"], true);
+    assert_eq!(json["data"]["total_required_gaps"], 0);
+
+    cleanup_teacher(&ctx.pool, teacher.user_id).await;
+}
+
+#[tokio::test]
+async fn test_preflight_empty_prompt_returns_422() {
+    let ctx = match common::setup().await {
+        Some(ctx) => ctx,
+        None => {
+            eprintln!("SKIP: DATABASE_URL not set or connection failed");
+            return;
+        }
+    };
+
+    let teacher = seed_teacher(&ctx.pool).await;
+
+    let body = serde_json::json!({
+        "raw_prompt": "   "
+    });
+
+    let (status, json) =
+        post_json(&ctx.app, "/api/v1/media-generations/preflight", &teacher.token, &body).await;
+    assert_eq!(
+        status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "Expected 422, got: {json}"
+    );
+
+    cleanup_teacher(&ctx.pool, teacher.user_id).await;
+}
+
+#[tokio::test]
+async fn test_confirm_returns_202() {
+    let ctx = match common::setup().await {
+        Some(ctx) => ctx,
+        None => {
+            eprintln!("SKIP: DATABASE_URL not set or connection failed");
+            return;
+        }
+    };
+
+    let teacher = seed_teacher(&ctx.pool).await;
+
+    // First, create a generation via preflight to get a generation_id
+    let preflight_body = serde_json::json!({
+        "raw_prompt": "Buatkan materi pecahan untuk kelas 5 SD"
+    });
+    let (status, preflight_json) = post_json(
+        &ctx.app,
+        "/api/v1/media-generations/preflight",
+        &teacher.token,
+        &preflight_body,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "Preflight failed: {preflight_json}");
+
+    let generation_id = preflight_json["data"]["generation_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // Now confirm with enriched prompt
+    let confirm_body = serde_json::json!({
+        "generation_id": generation_id,
+        "enriched_prompt": "Buatkan materi pecahan untuk SD Kelas 5, format PDF",
+        "answers": {
+            "target_audience": "SD_Kelas_5",
+            "output_type": "pdf"
+        }
+    });
+
+    let (status, json) = post_json(
+        &ctx.app,
+        "/api/v1/media-generations/confirm",
+        &teacher.token,
+        &confirm_body,
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED, "Expected 202, got: {json}");
+    assert_eq!(json["success"], true);
+    assert!(json["data"]["generation_id"].as_str().is_some());
+    assert!(json["data"]["job_id"].as_str().is_some());
+    assert_eq!(json["data"]["status"], "pending");
+    assert!(json["data"]["poll_url"].as_str().is_some());
+
+    // Verify clarification state was saved in DB
+    let gen_id_str = json["data"]["generation_id"].as_str().unwrap();
+    let gen_id: Uuid = Uuid::parse_str(gen_id_str).unwrap();
+    let row: (Option<serde_json::Value>, Option<chrono::DateTime<chrono::Utc>>, bool) =
+        sqlx::query_as(
+            r#"SELECT clarification_state, clarified_at, clarification_skipped
+               FROM media_generations WHERE id = $1"#,
+        )
+        .bind(gen_id)
+        .fetch_one(&ctx.pool)
+        .await
+        .unwrap();
+
+    assert!(row.0.is_some(), "clarification_state should be set");
+    assert!(row.1.is_some(), "clarified_at should be set");
+    assert!(!row.2, "clarification_skipped should be false for confirm");
+
+    cleanup_teacher(&ctx.pool, teacher.user_id).await;
+}
+
+#[tokio::test]
+async fn test_skip_clarification_returns_202() {
+    let ctx = match common::setup().await {
+        Some(ctx) => ctx,
+        None => {
+            eprintln!("SKIP: DATABASE_URL not set or connection failed");
+            return;
+        }
+    };
+
+    let teacher = seed_teacher(&ctx.pool).await;
+
+    // Create a generation directly in DB (simulating preflight-created generation)
+    let gen_id = Uuid::new_v4();
+    let fp = klass_gateway::orchestrator::submission::make_request_fingerprint(
+        teacher.user_id,
+        "Buatkan materi pecahan",
+        "auto",
+        None,
+        None,
+    );
+    sqlx::query(
+        r#"INSERT INTO media_generations
+               (id, teacher_id, raw_prompt, request_fingerprint, preferred_output_type, status)
+           VALUES ($1, $2, $3, $4, 'auto', 'queued')"#,
+    )
+    .bind(gen_id)
+    .bind(teacher.user_id)
+    .bind("Buatkan materi pecahan")
+    .bind(&fp)
+    .execute(&ctx.pool)
+    .await
+    .unwrap();
+
+    // Skip clarification
+    let (status, json) = post_json(
+        &ctx.app,
+        &format!("/api/v1/media-generations/{gen_id}/skip-clarification"),
+        &teacher.token,
+        &serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED, "Expected 202, got: {json}");
+    assert_eq!(json["success"], true);
+    assert!(json["data"]["job_id"].as_str().is_some());
+    assert_eq!(json["data"]["status"], "pending");
+
+    // Verify clarification state was saved with skipped=true
+    let row: (Option<serde_json::Value>, Option<chrono::DateTime<chrono::Utc>>, bool) =
+        sqlx::query_as(
+            r#"SELECT clarification_state, clarified_at, clarification_skipped
+               FROM media_generations WHERE id = $1"#,
+        )
+        .bind(gen_id)
+        .fetch_one(&ctx.pool)
+        .await
+        .unwrap();
+
+    assert!(row.0.is_some(), "clarification_state should be set");
+    assert!(row.1.is_some(), "clarified_at should be set");
+    assert!(row.2, "clarification_skipped should be true for skip");
+
+    cleanup_teacher(&ctx.pool, teacher.user_id).await;
+}
+
+#[tokio::test]
+async fn test_skip_clarification_terminal_returns_existing() {
+    let ctx = match common::setup().await {
+        Some(ctx) => ctx,
+        None => {
+            eprintln!("SKIP: DATABASE_URL not set or connection failed");
+            return;
+        }
+    };
+
+    let teacher = seed_teacher(&ctx.pool).await;
+
+    // Create a completed generation
+    let gen_id = Uuid::new_v4();
+    let fp = klass_gateway::orchestrator::submission::make_request_fingerprint(
+        teacher.user_id,
+        "Materi selesai",
+        "auto",
+        None,
+        None,
+    );
+    sqlx::query(
+        r#"INSERT INTO media_generations
+               (id, teacher_id, raw_prompt, request_fingerprint, preferred_output_type, status)
+           VALUES ($1, $2, $3, $4, 'auto', 'completed')"#,
+    )
+    .bind(gen_id)
+    .bind(teacher.user_id)
+    .bind("Materi selesai")
+    .bind(&fp)
+    .execute(&ctx.pool)
+    .await
+    .unwrap();
+
+    // Try to skip clarification on completed generation
+    let (status, json) = post_json(
+        &ctx.app,
+        &format!("/api/v1/media-generations/{gen_id}/skip-clarification"),
+        &teacher.token,
+        &serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED, "Expected 202, got: {json}");
+    assert_eq!(json["data"]["status"], "completed");
+
+    cleanup_teacher(&ctx.pool, teacher.user_id).await;
+}

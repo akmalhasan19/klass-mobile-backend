@@ -46,6 +46,10 @@ pub struct MediaGeneration {
     pub presigned_url_expires_at: Option<chrono::DateTime<chrono::Utc>>,
     pub generation_error_code: Option<String>,
     pub generation_error_message: Option<String>,
+    // -- Prompt clarification fields (Phase 2) --
+    pub clarification_state: Option<serde_json::Value>,
+    pub clarified_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub clarification_skipped: bool,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
     pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
 }
@@ -183,6 +187,15 @@ pub struct UpdateGenerationErrorPayload {
     pub generation_error_message: String,
 }
 
+// ─── Clarification payloads (Phase 2) ──────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct UpdateClarificationStatePayload {
+    pub clarification_state: Option<serde_json::Value>,
+    pub clarified_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub clarification_skipped: bool,
+}
+
 // ─── Admin listing types ───────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Default)]
@@ -225,6 +238,7 @@ const MG_SELECT_COLS: &str = r#"
     generation_job_id, generation_status, s3_object_key,
     presigned_download_url, presigned_url_expires_at,
     generation_error_code, generation_error_message,
+    clarification_state, clarified_at, clarification_skipped,
     created_at, updated_at
 "#;
 
@@ -284,6 +298,16 @@ pub trait MediaGenerationsRepo: Send + Sync {
         &self,
         id: Uuid,
         payload: &UpdateGenerationErrorPayload,
+    ) -> anyhow::Result<MediaGeneration>;
+
+    // ─── Prompt clarification (Phase 2) ───────────────────────────────────────
+
+    /// Update clarification state for a generation.
+    /// Sets `clarification_state`, `clarified_at`, and `clarification_skipped`.
+    async fn update_clarification_state(
+        &self,
+        id: Uuid,
+        payload: &UpdateClarificationStatePayload,
     ) -> anyhow::Result<MediaGeneration>;
 }
 
@@ -721,6 +745,37 @@ impl MediaGenerationsRepo for PgMediaGenerationsRepo {
 
         generation.ok_or_else(|| anyhow::anyhow!("media generation {id} not found"))
     }
+
+    // ─── Prompt clarification (Phase 2) ───────────────────────────────────────
+
+    async fn update_clarification_state(
+        &self,
+        id: Uuid,
+        payload: &UpdateClarificationStatePayload,
+    ) -> anyhow::Result<MediaGeneration> {
+        let sql = format!(
+            r#"
+            UPDATE media_generations
+            SET clarification_state = $2,
+                clarified_at = $3,
+                clarification_skipped = $4,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING {MG_SELECT_COLS}
+            "#,
+        );
+
+        let generation = sqlx::query_as::<_, MediaGeneration>(&sql)
+            .bind(id)
+            .bind(&payload.clarification_state)
+            .bind(payload.clarified_at)
+            .bind(payload.clarification_skipped)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to update clarification state for {id}: {e}"))?;
+
+        generation.ok_or_else(|| anyhow::anyhow!("media generation {id} not found"))
+    }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -977,6 +1032,9 @@ mod tests {
             presigned_url_expires_at: None,
             generation_error_code: None,
             generation_error_message: None,
+            clarification_state: None,
+            clarified_at: None,
+            clarification_skipped: false,
             created_at: None,
             updated_at: None,
         };
@@ -984,6 +1042,7 @@ mod tests {
         assert_eq!(gen.raw_prompt, "Buatkan materi pecahan");
         assert_eq!(gen.status, "queued");
         assert!(!gen.is_regeneration);
+        assert!(!gen.clarification_skipped);
     }
 
     #[test]
@@ -1141,6 +1200,9 @@ mod tests {
             presigned_url_expires_at: None,
             generation_error_code: None,
             generation_error_message: None,
+            clarification_state: None,
+            clarified_at: None,
+            clarification_skipped: false,
             created_at: None,
             updated_at: None,
         };
@@ -1206,6 +1268,9 @@ mod tests {
             presigned_url_expires_at: None,
             generation_error_code: None,
             generation_error_message: None,
+            clarification_state: None,
+            clarified_at: None,
+            clarification_skipped: false,
             created_at: None,
             updated_at: None,
         };
@@ -1238,5 +1303,92 @@ mod tests {
         let parts = build_payload_set(&payload);
         assert_eq!(parts.len(), 3);
         assert!(parts.contains(&"interpretation_payload = $1".to_string()));
+    }
+
+    #[test]
+    fn test_update_clarification_state_payload() {
+        let payload = UpdateClarificationStatePayload {
+            clarification_state: Some(serde_json::json!({
+                "answers": {"target_audience": "SD_Kelas_5"},
+                "suggested_prompt": "Buatkan materi pecahan untuk SD Kelas 5",
+            })),
+            clarified_at: Some(chrono::Utc::now()),
+            clarification_skipped: false,
+        };
+
+        assert!(payload.clarification_state.is_some());
+        assert!(payload.clarified_at.is_some());
+        assert!(!payload.clarification_skipped);
+    }
+
+    #[test]
+    fn test_update_clarification_state_payload_skipped() {
+        let payload = UpdateClarificationStatePayload {
+            clarification_state: Some(serde_json::json!({
+                "answers": {},
+                "skipped": true,
+            })),
+            clarified_at: Some(chrono::Utc::now()),
+            clarification_skipped: true,
+        };
+
+        assert!(payload.clarification_skipped);
+    }
+
+    #[test]
+    fn test_media_generation_clarification_fields() {
+        let gen = MediaGeneration {
+            id: Uuid::new_v4(),
+            generated_from_id: None,
+            is_regeneration: false,
+            teacher_id: 1,
+            subject_id: None,
+            sub_subject_id: None,
+            topic_id: None,
+            content_id: None,
+            recommended_project_id: None,
+            raw_prompt: "Test".to_string(),
+            request_fingerprint: "fp".to_string(),
+            active_duplicate_key: None,
+            preferred_output_type: "auto".to_string(),
+            resolved_output_type: None,
+            status: "queued".to_string(),
+            llm_provider: None,
+            llm_model: None,
+            generator_provider: None,
+            generator_model: None,
+            interpretation_payload: None,
+            interpretation_audit_payload: None,
+            generation_spec_payload: None,
+            decision_payload: None,
+            orchestration_audit_payload: None,
+            delivery_payload: None,
+            generator_service_response: None,
+            storage_path: None,
+            file_url: None,
+            thumbnail_url: None,
+            mime_type: None,
+            error_code: None,
+            error_message: None,
+            generation_job_id: None,
+            generation_status: None,
+            s3_object_key: None,
+            presigned_download_url: None,
+            presigned_url_expires_at: None,
+            generation_error_code: None,
+            generation_error_message: None,
+            clarification_state: Some(serde_json::json!({
+                "answers": {"target_audience": "SD_Kelas_5"},
+                "suggested_prompt": "Buatkan materi pecahan untuk SD Kelas 5",
+            })),
+            clarified_at: Some(chrono::Utc::now()),
+            clarification_skipped: false,
+            created_at: None,
+            updated_at: None,
+        };
+
+        assert!(gen.clarification_state.is_some());
+        assert!(gen.clarified_at.is_some());
+        assert!(!gen.clarification_skipped);
     }
 }

@@ -34,6 +34,10 @@ use utoipa::Modify;
         crate::api::rest::media_generations::show,
         crate::api::rest::media_generations::regenerate,
         crate::api::rest::media_generations::job_status,
+        // Clarification (teacher)
+        crate::api::rest::clarification::preflight,
+        crate::api::rest::clarification::confirm,
+        crate::api::rest::clarification::skip_clarification,
         // NOTE: `POST /internal/media-generations/webhook`
         // (crate::api::rest::media_webhook::webhook_handler) is intentionally
         // EXCLUDED from the public OpenAPI docs — it is an internal, HMAC-signed
@@ -157,6 +161,14 @@ use utoipa::Modify;
             // Async job tracking (Task 1.3)
             crate::api::rest::media_generations::CreateMediaGenerationResponse,
             crate::api::rest::media_generations::JobStatusResponse,
+            // Clarification (teacher)
+            crate::api::rest::clarification::PreflightRequest,
+            crate::api::rest::clarification::ConfirmRequest,
+            crate::api::rest::clarification::PreflightResponseData,
+            crate::api::rest::clarification::DetectedInfoSchema,
+            crate::api::rest::clarification::ContentGapSchema,
+            crate::api::rest::clarification::SuggestionChipSchema,
+            crate::api::rest::clarification::ConfirmResponseData,
             // Freelancer
             crate::api::rest::freelancer::FreelancerMatchResource,
             crate::api::rest::freelancer::HiredFreelancerResource,

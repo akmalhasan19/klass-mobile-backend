@@ -14,5 +14,6 @@ pub mod providers;
 pub mod queue;
 pub mod recommendation;
 pub mod smoke;
+pub mod standards;
 pub mod state;
 pub mod storage;
