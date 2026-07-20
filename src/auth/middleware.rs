@@ -16,12 +16,6 @@ pub struct Principal {
     pub role: String,
 }
 
-/// Optional version of `Principal` that returns `None` when no Bearer token
-/// is present, instead of rejecting the request. Used by endpoints where
-/// authentication is optional (e.g. homepage recommendations).
-///
-/// If a token IS present but is invalid or expired, it still returns `None`
-/// (effectively treating the user as a guest).
 #[derive(Debug, Clone)]
 pub struct OptionalPrincipal(pub Option<Principal>);
 
