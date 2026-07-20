@@ -91,7 +91,7 @@ impl PriceCatalogRepo {
 /// Pure function — estimate cost from token counts and optional pricing.
 ///
 /// Defaults (when no PriceEntry exists):
-/// - Input: $0.10 / 1M tokens (tencent V4 Flash typical)
+/// - Input: $0.10 / 1M tokens (xiaomi V4 Flash typical)
 /// - Output: $0.40 / 1M tokens
 pub fn estimate_cost_inner(
     price_entry: &Option<PriceEntry>,
@@ -143,8 +143,8 @@ mod tests {
     fn make_price(input_rate: Decimal, output_rate: Decimal) -> PriceEntry {
         PriceEntry {
             id: 1,
-            provider: "tencent".to_string(),
-            model: "hy3:free".to_string(),
+            provider: "xiaomi".to_string(),
+            model: "mimo-v2.5".to_string(),
             input_cost_per_unit_usd: Some(input_rate),
             output_cost_per_unit_usd: Some(output_rate),
             effective_from: DateTime::from_timestamp(0, 0).unwrap(),

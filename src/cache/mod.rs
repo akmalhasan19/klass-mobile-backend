@@ -405,16 +405,16 @@ mod tests {
         let input = serde_json::json!({"teacher_prompt": "Buatkan materi"});
         let key1 = build_cache_key(
             CacheRoute::Interpret,
-            "tencent",
-            "hy3:free",
+            "xiaomi",
+            "mimo-v2.5",
             "media_prompt_interpretation",
             "Interpret the following prompt",
             &input,
         );
         let key2 = build_cache_key(
             CacheRoute::Interpret,
-            "tencent",
-            "hy3:free",
+            "xiaomi",
+            "mimo-v2.5",
             "media_prompt_interpretation",
             "Interpret the following prompt",
             &input,
@@ -439,7 +439,7 @@ mod tests {
     fn test_build_cache_key_different_providers_differ() {
         let input = serde_json::json!({"teacher_prompt": "test"});
         let key1 = build_cache_key(
-            CacheRoute::Interpret, "tencent", "m", "t", "i", &input,
+            CacheRoute::Interpret, "xiaomi", "m", "t", "i", &input,
         );
         let key2 = build_cache_key(
             CacheRoute::Interpret, "gemini", "m", "t", "i", &input,
@@ -494,10 +494,10 @@ mod tests {
     fn test_build_cache_key_normalizes_provider_case() {
         let input = serde_json::json!({"prompt": "hello"});
         let key_lower = build_cache_key(
-            CacheRoute::Interpret, "tencent", "m", "t", "i", &input,
+            CacheRoute::Interpret, "xiaomi", "m", "t", "i", &input,
         );
         let key_mixed = build_cache_key(
-            CacheRoute::Interpret, "tencent", "m", "t", "i", &input,
+            CacheRoute::Interpret, "xiaomi", "m", "t", "i", &input,
         );
         // Both should produce the same key because provider is lowercased
         assert_eq!(key_lower, key_mixed, "provider should be case-normalized");
@@ -537,10 +537,10 @@ mod tests {
         let input1 = serde_json::json!({"teacher_prompt": "Buatkan materi", "language": "id"});
         let input2 = serde_json::json!({"language": "id", "teacher_prompt": "Buatkan materi"});
         let key1 = build_cache_key(
-            CacheRoute::Interpret, "tencent", "m", "t", "i", &input1,
+            CacheRoute::Interpret, "xiaomi", "m", "t", "i", &input1,
         );
         let key2 = build_cache_key(
-            CacheRoute::Interpret, "tencent", "m", "t", "i", &input2,
+            CacheRoute::Interpret, "xiaomi", "m", "t", "i", &input2,
         );
         assert_eq!(key1, key2, "cache key must be independent of input field order");
     }

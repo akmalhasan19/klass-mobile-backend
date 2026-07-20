@@ -95,6 +95,10 @@ impl CompletionRequest {
     }
 
     /// Enable JSON mode by setting `response_format: {type: "json_object"}`.
+    ///
+    /// NOTE: Some models/providers (e.g. xiaomi/hy3 via Novita) do not support
+    /// `json_object` and only support `json_schema`. In those cases, the caller
+    /// should rely on the system prompt to instruct JSON output and skip this.
     pub fn with_json_mode(mut self) -> Self {
         self.response_format = Some(ResponseFormat {
             format_type: "json_object".to_string(),
@@ -192,13 +196,13 @@ mod tests {
     #[test]
     fn test_completion_request_new() {
         let req = CompletionRequest::new(
-            "tencent/hy3:free",
+            "xiaomi/mimo-v2.5",
             vec![ChatMessage {
                 role: "user".to_string(),
                 content: "Hi".to_string(),
             }],
         );
-        assert_eq!(req.model, "tencent/hy3:free");
+        assert_eq!(req.model, "xiaomi/mimo-v2.5");
         assert_eq!(req.messages.len(), 1);
     }
 
@@ -283,11 +287,11 @@ mod tests {
                 "index": 0
             }],
             "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
-            "model": "tencent/hy3:free"
+            "model": "xiaomi/mimo-v2.5"
         }"#;
         let resp: CompletionResponse = serde_json::from_str(json).unwrap();
         assert_eq!(resp.first_choice_content(), Some("Hi"));
-        assert_eq!(resp.model.as_deref(), Some("tencent/hy3:free"));
+        assert_eq!(resp.model.as_deref(), Some("xiaomi/mimo-v2.5"));
     }
 
     // ── Provider trait ────────────────────────────────────────────────────

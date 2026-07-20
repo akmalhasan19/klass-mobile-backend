@@ -264,9 +264,9 @@ fn test_completed_transition_payload_shape() {
         "schema_version": "media_generation_orchestration_audit.v1",
         "current_status": "completed",
         "provider_trace": {
-            "interpretation": { "name": "openrouter", "model": "hy3:free" },
+            "interpretation": { "name": "openrouter", "model": "mimo-v2.5" },
             "generator": { "name": "python-renderer", "model": "hf-space-v3" },
-            "delivery": { "name": "openrouter", "model": "hy3:free" },
+            "delivery": { "name": "openrouter", "model": "mimo-v2.5" },
         },
         "timing": {
             "queued_at": "2026-07-15T00:00:00Z",

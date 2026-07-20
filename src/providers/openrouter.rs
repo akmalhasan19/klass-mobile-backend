@@ -24,7 +24,7 @@ const DEFAULT_RETRY_BACKOFF_MS: u64 = 500;
 pub struct OpenRouterConfig {
     /// OpenRouter API key (sk-or-...).
     pub api_key: String,
-    /// Default model name (e.g. "tencent/hy3:free").
+    /// Default model name (e.g. "xiaomi/mimo-v2.5").
     pub model: String,
     /// Base URL (e.g. "https://openrouter.ai/api/v1").
     pub base_url: String,
@@ -54,7 +54,7 @@ impl Default for OpenRouterConfig {
     fn default() -> Self {
         Self {
             api_key: String::new(),
-            model: "tencent/hy3:free".to_string(),
+            model: "xiaomi/mimo-v2.5".to_string(),
             base_url: "https://openrouter.ai/api/v1".to_string(),
             timeout_seconds: DEFAULT_TIMEOUT_SECS,
             retry_attempts: DEFAULT_RETRY_ATTEMPTS,
@@ -244,10 +244,12 @@ pub fn extract_content(raw: &serde_json::Value) -> Option<String> {
 
 // ─── Helper: build request with JSON mode ────────────────────────────────────
 
-/// Create a `CompletionRequest` with `response_format: {type: "json_object"}`.
+/// Create a `CompletionRequest` for structured JSON output.
 ///
-/// Use this for interpret, draft, and respond routes where structured JSON
-/// output is required.
+/// Does NOT set `response_format` because not all models/providers support
+/// it (e.g. xiaomi/hy3 via Novita only supports `json_schema`, not
+/// `json_object`). The system prompt already instructs the model to return
+/// valid JSON, so the model will comply without the explicit format hint.
 pub fn json_mode_request(
     model: &str,
     system_prompt: &str,
@@ -263,7 +265,6 @@ pub fn json_mode_request(
             content: user_prompt.to_string(),
         },
     ])
-    .with_json_mode()
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -275,7 +276,7 @@ mod tests {
     #[test]
     fn test_openrouter_config_default() {
         let config = OpenRouterConfig::default();
-        assert_eq!(config.model, "tencent/hy3:free");
+        assert_eq!(config.model, "xiaomi/mimo-v2.5");
         assert_eq!(config.timeout_seconds, 90);
         assert_eq!(config.retry_attempts, 2);
         assert_eq!(config.retry_backoff_ms, 500);
@@ -317,7 +318,7 @@ mod tests {
     fn test_from_app_config() {
         let config = crate::config::AppConfig {
             openrouter_api_key: "sk-or-test-key".to_string(),
-            openrouter_model: "tencent/hy3:free".to_string(),
+            openrouter_model: "xiaomi/mimo-v2.5".to_string(),
             openrouter_base_url: "https://openrouter.ai/api/v1".to_string(),
             host: "0.0.0.0".to_string(),
             port: 8080,
@@ -366,7 +367,7 @@ mod tests {
         };
         let or_config = OpenRouterConfig::from_app_config(&config);
         assert_eq!(or_config.api_key, "sk-or-test-key");
-        assert_eq!(or_config.model, "tencent/hy3:free");
+        assert_eq!(or_config.model, "xiaomi/mimo-v2.5");
         assert_eq!(or_config.timeout_seconds, 90);
     }
 
