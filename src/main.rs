@@ -13,12 +13,22 @@ use tower_http::trace::TraceLayer;
 use tracing::info;
 
 use klass_gateway::api;
+use klass_gateway::cache::LlmCacheRepo;
 use klass_gateway::config::AppConfig;
+use klass_gateway::governance::ledger::LedgerRepo;
+use klass_gateway::governance::price_catalog::PriceCatalogRepo;
+use klass_gateway::governance::rate_limit::{RateLimitPoliciesRepo, RateLimitBucketsRepo};
+use klass_gateway::llm::draft::DraftService;
+use klass_gateway::llm::interpret::InterpretService;
+use klass_gateway::llm::respond::RespondService;
+use klass_gateway::llm::step_adapters::{InterpretStepAdapter, DraftStepAdapter, ComposeStepAdapter};
 use klass_gateway::media_gen::publication::MediaPublicationService;
 use klass_gateway::media_gen::python_client::PythonMediaGeneratorClient;
 use klass_gateway::orchestrator::workflow::{
-    ComposeStep, DraftStep, InterpretStep, WorkflowError,
+    ComposeStep, DraftStep, InterpretStep,
 };
+use klass_gateway::providers::openrouter::{OpenRouterConfig, OpenRouterProviderClient};
+use klass_gateway::providers::router::ProviderRouter;
 use klass_gateway::queue::worker::{Worker, CONSUMER_PREFIX};
 use klass_gateway::state::AppState;
 
@@ -137,19 +147,62 @@ async fn run_worker(config: AppConfig) -> anyhow::Result<()> {
         concurrency,
     );
 
-    // Build step implementations
-    let interpret: Arc<dyn InterpretStep> = Arc::new(UnimplementedStep::new("interpret"));
-    let draft: Arc<dyn DraftStep> = Arc::new(UnimplementedStep::new("draft"));
-    let compose: Arc<dyn ComposeStep> = Arc::new(UnimplementedStep::new("compose"));
+    // ── Build shared LLM infrastructure ──────────────────────────────────
+    let pool = state.db_pool.clone();
+
+    let or_config = OpenRouterConfig::from_app_config(&config);
+    let openrouter_client = OpenRouterProviderClient::new(state.http.clone(), or_config.clone());
+    let provider_router = Arc::new(ProviderRouter::new(Box::new(openrouter_client)));
+
+    // ── Build LLM services ──────────────────────────────────────────────
+    // Each service needs its own repo instances (repos are not Clone).
+    let interpret_service = InterpretService::new(
+        LlmCacheRepo::new(pool.clone()),
+        LedgerRepo::new(pool.clone()),
+        PriceCatalogRepo::new(pool.clone()),
+        RateLimitPoliciesRepo::new(pool.clone()),
+        RateLimitBucketsRepo::new(pool.clone()),
+        provider_router.clone(),
+        state.taxonomy.clone(),
+        or_config.model.clone(),
+        klass_gateway::llm::interpret::DEFAULT_INTERPRET_INSTRUCTION.to_string(),
+    );
+
+    let draft_service = DraftService::new(
+        LlmCacheRepo::new(pool.clone()),
+        LedgerRepo::new(pool.clone()),
+        PriceCatalogRepo::new(pool.clone()),
+        RateLimitPoliciesRepo::new(pool.clone()),
+        RateLimitBucketsRepo::new(pool.clone()),
+        provider_router.clone(),
+        or_config.model.clone(),
+        klass_gateway::llm::draft::DEFAULT_DRAFT_INSTRUCTION.to_string(),
+    );
+
+    let respond_service = RespondService::new(
+        LlmCacheRepo::new(pool.clone()),
+        LedgerRepo::new(pool.clone()),
+        PriceCatalogRepo::new(pool.clone()),
+        RateLimitPoliciesRepo::new(pool.clone()),
+        RateLimitBucketsRepo::new(pool.clone()),
+        provider_router.clone(),
+        or_config.model.clone(),
+        klass_gateway::llm::respond::DEFAULT_RESPOND_INSTRUCTION.to_string(),
+    );
+
+    // ── Build step adapters ─────────────────────────────────────────────
+    let interpret: Arc<dyn InterpretStep> = Arc::new(InterpretStepAdapter::new(pool.clone(), interpret_service));
+    let draft: Arc<dyn DraftStep> = Arc::new(DraftStepAdapter::new(pool.clone(), draft_service));
+    let compose: Arc<dyn ComposeStep> = Arc::new(ComposeStepAdapter::new(pool.clone(), respond_service));
 
     let generate = Arc::new(PythonMediaGeneratorClient::new(
-        state.db_pool.clone(),
+        pool.clone(),
         state.http.clone(),
         &config,
     ));
 
     let publish = Arc::new(MediaPublicationService::new(
-        state.db_pool.clone(),
+        pool.clone(),
         state.s3_client.clone(),
         state.http.clone(),
         config.r2_bucket_name.clone(),
@@ -158,12 +211,13 @@ async fn run_worker(config: AppConfig) -> anyhow::Result<()> {
     ));
 
     let workflow = klass_gateway::orchestrator::workflow::WorkflowService::new(
-        state.db_pool.clone(),
+        pool.clone(),
     );
 
     info!(
         concurrency = concurrency,
-        "Worker starting event loop"
+        model = %or_config.model,
+        "Worker starting event loop with LLM pipeline wired"
     );
 
     worker
@@ -177,46 +231,6 @@ async fn run_worker(config: AppConfig) -> anyhow::Result<()> {
         )
         .await
         .map_err(|e| anyhow::anyhow!("Worker exited with error: {e}"))
-}
-
-// ─── Placeholder step for services not yet implemented ─────────────────────
-
-/// Returns an error indicating the step is not yet wired.
-struct UnimplementedStep {
-    _name: &'static str,
-}
-
-impl UnimplementedStep {
-    const fn new(_name: &'static str) -> Self {
-        Self { _name }
-    }
-}
-
-#[async_trait::async_trait]
-impl InterpretStep for UnimplementedStep {
-    async fn interpret(&self, _generation_id: &str) -> Result<serde_json::Value, WorkflowError> {
-        Err(WorkflowError::StepProvider(format!(
-            "interpret step not yet wired: the InterpretService must be connected in Phase 5 completion"
-        )))
-    }
-}
-
-#[async_trait::async_trait]
-impl DraftStep for UnimplementedStep {
-    async fn draft(&self, _generation_id: &str) -> Result<serde_json::Value, WorkflowError> {
-        Err(WorkflowError::StepProvider(format!(
-            "draft step not yet wired: the DraftService must be connected in Phase 5 completion"
-        )))
-    }
-}
-
-#[async_trait::async_trait]
-impl ComposeStep for UnimplementedStep {
-    async fn compose(&self, _generation_id: &str) -> Result<serde_json::Value, WorkflowError> {
-        Err(WorkflowError::StepProvider(format!(
-            "compose step not yet wired: the RespondService must be connected in Phase 5 completion"
-        )))
-    }
 }
 
 // ─── CORS helper ───────────────────────────────────────────────────────────
