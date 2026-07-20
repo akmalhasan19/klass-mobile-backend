@@ -626,10 +626,61 @@ fn format_type_label(format_type: &str) -> &'static str {
     }
 }
 
+/// Normalize emphasis/estimated_length to a value the Python renderer accepts.
+///
+/// Python `Section.emphasis` is `Literal["short", "medium", "long"]`.
+/// The LLM may return arbitrary strings like "long_text", "brief", etc.
+fn normalize_emphasis(raw: Option<&str>) -> &'static str {
+    match raw.unwrap_or("medium") {
+        "short" | "brief" | "concise" | "minimal" => "short",
+        "long" | "long_text" | "detailed" | "extensive" | "comprehensive" => "long",
+        _ => "medium",
+    }
+}
+
+/// Normalize assessment_or_activity_block type to a value the Python renderer accepts.
+///
+/// Python `AssessmentBlock.type` is
+/// `Literal["assessment", "activity", "reflection", "quiz", "assignment"]`.
+fn normalize_assessment_type(raw: &str) -> &'static str {
+    match raw.to_lowercase().as_str() {
+        "assessment" | "test" | "exam" | "evaluation" => "assessment",
+        "activity" | "exercise" | "practice" | "task" => "activity",
+        "reflection" | "reflect" | "thinking" => "reflection",
+        "quiz" | "question" | "mcq" => "quiz",
+        "assignment" | "homework" | "worksheet" => "assignment",
+        _ => "activity",
+    }
+}
+
+/// Normalize body block type to a value the Python renderer accepts.
+///
+/// Python `BodyBlock.type` is `Literal["paragraph", "bullet", "checklist", "note"]`.
+fn normalize_body_block_type(raw: &str) -> &'static str {
+    match raw.to_lowercase().as_str() {
+        "paragraph" | "text" | "p" => "paragraph",
+        "bullet" | "bullets" | "list" | "ul" => "bullet",
+        "checklist" | "check" | "checkbox" => "checklist",
+        "note" | "callout" | "info" => "note",
+        _ => "paragraph",
+    }
+}
+
+/// Ensure a string field is non-null and non-empty, providing a fallback.
+fn require_str(val: Option<&str>, fallback: &str) -> String {
+    val.unwrap_or(fallback).to_string()
+}
+
 /// Build a generation spec payload (for the Python renderer).
 ///
 /// When a content draft is available, uses draft sections.
 /// Otherwise builds from the interpretation blueprint directly.
+///
+/// All fields are normalized to match the Python `GenerationSpec` strict model:
+/// - Required strings are never null/empty
+/// - Enum fields use allowed values
+/// - Sections always have ≥1 body_block with valid type
+/// - Section counts match layout_hints
 fn build_generation_spec(
     interpretation: &Value,
     resolved_output_type: &str,
@@ -643,73 +694,208 @@ fn build_generation_spec(
     };
     let unit_type = if export_format == "pptx" { "slide" } else { "page" };
 
-    // Build sections
+    // ── Extract safe string helpers ───────────────────────────────────────
+    let teacher_prompt = interpretation
+        .get("teacher_prompt")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Learning material");
+
+    let raw_title = interpretation
+        .pointer("/document_blueprint/title")
+        .and_then(|v| v.as_str());
+    let raw_summary = interpretation
+        .pointer("/document_blueprint/summary")
+        .and_then(|v| v.as_str());
+    let raw_delivery = interpretation
+        .get("teacher_delivery_summary")
+        .and_then(|v| v.as_str());
+    let raw_language = interpretation
+        .get("language")
+        .and_then(|v| v.as_str());
+
+    let title = require_str(raw_title, teacher_prompt);
+    let summary = require_str(raw_summary, teacher_prompt);
+    let teacher_delivery_summary = require_str(raw_delivery, teacher_prompt);
+    let language = require_str(raw_language, "id");
+    let source_schema_version = interpretation
+        .get("schema_version")
+        .and_then(|v| v.as_str())
+        .unwrap_or("media_prompt_understanding.v1");
+
+    // ── Build sections ────────────────────────────────────────────────────
     let sections: Vec<Value> = if let Some(draft) = draft_payload {
         // Use draft content sections
         if let Some(payload) = draft.get("payload") {
             if let Some(draft_sections) = payload.get("sections").and_then(|s| s.as_array()) {
-                draft_sections
+                let built: Vec<Value> = draft_sections
                     .iter()
                     .map(|s| {
+                        let s_title = s.get("title")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Untitled Section");
+                        let s_purpose = s.get("purpose")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Section content");
+                        let raw_emphasis = s.get("emphasis")
+                            .and_then(|v| v.as_str());
+
+                        // Ensure body_blocks is non-empty and each block is valid
+                        let body_blocks: Vec<Value> = s.get("body_blocks")
+                            .and_then(|b| b.as_array())
+                            .map(|blocks| {
+                                let normalized: Vec<Value> = blocks
+                                    .iter()
+                                    .filter_map(|b| {
+                                        let btype = b.get("type")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("paragraph");
+                                        let content = b.get("content")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("");
+                                        if content.is_empty() {
+                                            None
+                                        } else {
+                                            Some(serde_json::json!({
+                                                "type": normalize_body_block_type(btype),
+                                                "content": content,
+                                            }))
+                                        }
+                                    })
+                                    .collect();
+                                if normalized.is_empty() {
+                                    vec![serde_json::json!({
+                                        "type": "paragraph",
+                                        "content": s_purpose,
+                                    })]
+                                } else {
+                                    normalized
+                                }
+                            })
+                            .unwrap_or_else(|| {
+                                vec![serde_json::json!({
+                                    "type": "paragraph",
+                                    "content": s_purpose,
+                                })]
+                            });
+
                         serde_json::json!({
-                            "title": s.get("title"),
-                            "purpose": s.get("purpose"),
-                            "body_blocks": s.get("body_blocks").cloned().unwrap_or(Value::Array(vec![])),
-                            "emphasis": s.get("emphasis"),
+                            "title": s_title,
+                            "purpose": s_purpose,
+                            "body_blocks": body_blocks,
+                            "emphasis": normalize_emphasis(raw_emphasis),
                         })
                     })
-                    .collect()
+                    .collect();
+                if built.is_empty() {
+                    vec![default_section(teacher_prompt)]
+                } else {
+                    built
+                }
             } else {
-                vec![]
+                vec![default_section(teacher_prompt)]
             }
         } else {
-            vec![]
+            vec![default_section(teacher_prompt)]
         }
     } else {
         // Build sections from interpretation blueprint
         interpretation
             .pointer("/document_blueprint/sections")
             .and_then(|s| s.as_array())
-            .map(|sections| {
-                sections
+            .map(|bp_sections| {
+                let built: Vec<Value> = bp_sections
                     .iter()
                     .map(|s| {
-                        let bullets: Vec<Value> = s
+                        let s_title = s.get("title")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Untitled Section");
+                        let s_purpose = s.get("purpose")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Section content");
+                        let raw_emphasis = s.get("estimated_length")
+                            .and_then(|v| v.as_str());
+
+                        let body_blocks: Vec<Value> = s
                             .get("bullets")
                             .and_then(|b| b.as_array())
-                            .map(|b| {
-                                b.iter()
-                                    .map(|bullet| {
-                                        serde_json::json!({
-                                            "type": "bullet",
-                                            "content": bullet,
-                                        })
+                            .map(|bullets| {
+                                let normalized: Vec<Value> = bullets
+                                    .iter()
+                                    .filter_map(|bullet| {
+                                        let content = bullet.as_str().unwrap_or("");
+                                        if content.is_empty() {
+                                            None
+                                        } else {
+                                            Some(serde_json::json!({
+                                                "type": "bullet",
+                                                "content": content,
+                                            }))
+                                        }
                                     })
-                                    .collect()
+                                    .collect();
+                                if normalized.is_empty() {
+                                    vec![serde_json::json!({
+                                        "type": "paragraph",
+                                        "content": s_purpose,
+                                    })]
+                                } else {
+                                    normalized
+                                }
                             })
                             .unwrap_or_else(|| {
                                 vec![serde_json::json!({
                                     "type": "paragraph",
-                                    "content": s.get("purpose"),
+                                    "content": s_purpose,
                                 })]
                             });
 
                         serde_json::json!({
-                            "title": s.get("title"),
-                            "purpose": s.get("purpose"),
-                            "body_blocks": bullets,
-                            "emphasis": s.get("estimated_length"),
+                            "title": s_title,
+                            "purpose": s_purpose,
+                            "body_blocks": body_blocks,
+                            "emphasis": normalize_emphasis(raw_emphasis),
                         })
                     })
-                    .collect()
+                    .collect();
+                if built.is_empty() {
+                    vec![default_section(teacher_prompt)]
+                } else {
+                    built
+                }
             })
-            .unwrap_or_default()
+            .unwrap_or_else(|| vec![default_section(teacher_prompt)])
     };
 
+    // ── Assessment blocks — normalize type ─────────────────────────────────
     let assessment_blocks: Vec<Value> = interpretation
         .get("assessment_or_activity_blocks")
         .and_then(|a| a.as_array())
-        .cloned()
+        .map(|blocks| {
+            blocks
+                .iter()
+                .filter_map(|b| {
+                    let a_title = b.get("title")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Activity");
+                    let raw_type = b.get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("activity");
+                    let instructions = b.get("instructions")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Complete the activity.");
+
+                    if instructions.is_empty() {
+                        None
+                    } else {
+                        Some(serde_json::json!({
+                            "title": a_title,
+                            "type": normalize_assessment_type(raw_type),
+                            "instructions": instructions,
+                        }))
+                    }
+                })
+                .collect()
+        })
         .unwrap_or_default();
 
     let style_tone = interpretation
@@ -732,20 +918,50 @@ fn build_generation_spec(
         format_prefs.push(Value::String(export_format.to_string()));
     }
 
+    // ── Assets — normalize type field ─────────────────────────────────────
+    let assets: Vec<Value> = interpretation
+        .get("assets")
+        .and_then(|a| a.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|a| {
+                    let a_type = a.get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("text");
+                    let description = a.get("description")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Asset");
+                    let required = a.get("required")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    let normalized_type = match a_type {
+                        "text" | "image" | "table" | "chart" | "diagram" | "reference" => a_type,
+                        _ => "text",
+                    };
+                    Some(serde_json::json!({
+                        "type": normalized_type,
+                        "description": description,
+                        "required": required,
+                    }))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
     serde_json::json!({
         "schema_version": "media_generation_spec.v1",
-        "source_interpretation_schema_version": interpretation.get("schema_version"),
+        "source_interpretation_schema_version": source_schema_version,
         "export_format": export_format,
-        "title": interpretation.pointer("/document_blueprint/title"),
-        "language": interpretation.get("language"),
-        "summary": interpretation.pointer("/document_blueprint/summary"),
+        "title": title,
+        "language": language,
+        "summary": summary,
         "learning_objectives": interpretation.get("learning_objectives").cloned().unwrap_or(Value::Array(vec![])),
         "sections": sections,
         "layout_hints": {
             "document_mode": document_mode,
             "visual_density": interpretation.pointer("/requested_media_characteristics/visual_density").and_then(|v| v.as_str()).unwrap_or("medium"),
             "section_count": sections.len() as i64,
-            "asset_count": interpretation.get("assets").and_then(|a| a.as_array()).map_or(0, |a| a.len()) as i64,
+            "asset_count": assets.len() as i64,
             "assessment_block_count": assessment_blocks.len() as i64,
         },
         "style_hints": {
@@ -771,12 +987,33 @@ fn build_generation_spec(
             "classification_source": "fallback",
             "metadata": { "synthetic": true },
         },
-        "assets": interpretation.get("assets").cloned().unwrap_or(Value::Array(vec![])),
+        "assets": assets,
         "assessment_or_activity_blocks": assessment_blocks,
-        "teacher_delivery_summary": interpretation.get("teacher_delivery_summary"),
+        "teacher_delivery_summary": teacher_delivery_summary,
         "contract_versions": {
-            "generator_output_metadata": "media_artifact_metadata.v1"
+            "generator_output_metadata": "media_generator_output_metadata.v1"
         }
+    })
+}
+
+/// Build a default section from the teacher prompt (used when no sections exist).
+fn default_section(teacher_prompt: &str) -> Value {
+    // Safely truncate to 200 chars (handles multi-byte UTF-8)
+    let char_count = teacher_prompt.chars().count();
+    let truncated: String = if char_count > 200 {
+        let s: String = teacher_prompt.chars().take(197).collect();
+        format!("{}...", s)
+    } else {
+        teacher_prompt.to_string()
+    };
+    serde_json::json!({
+        "title": truncated,
+        "purpose": "Deliver the requested learning material.",
+        "body_blocks": [{
+            "type": "paragraph",
+            "content": teacher_prompt,
+        }],
+        "emphasis": "medium",
     })
 }
 

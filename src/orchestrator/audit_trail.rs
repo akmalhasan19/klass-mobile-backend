@@ -445,9 +445,12 @@ impl AuditTrailService {
             r#"
             UPDATE media_generations
             SET status = 'failed',
+                generation_status = 'failed',
                 orchestration_audit_payload = $1,
                 error_code = $2,
                 error_message = $3,
+                generation_error_code = $2,
+                generation_error_message = $3,
                 updated_at = NOW()
             WHERE id = $4
             "#,
