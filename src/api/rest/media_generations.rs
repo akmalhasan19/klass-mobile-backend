@@ -253,131 +253,33 @@ pub async fn create(
         .await
         .map_err(|e| AppError::Internal(format!("failed to set generation job status: {e}")))?;
 
-        // Pre-populate classification fields so the worker skips the
-        // unimplemented interpret/draft LLM steps (has_classification → true).
-        let output_type_raw = preferred_output_type.as_deref().unwrap_or("docx");
-        // Normalize to a Python-supported export format (docx, pdf, pptx).
-        // NOTE: "handout" → "docx" because PDF requires a Chromium sidecar
-        // which may not be available in all environments.
-        let output_type = match output_type_raw {
-            "docx" | "pdf" | "pptx" => output_type_raw,
-            "handout" => "docx",
-            "worksheet" => "docx",
-            "slide" | "slides" | "presentation" => "pptx",
-            _ => "docx",
-        };
-        let interpretation_payload = serde_json::json!({
-            "schema_version": interp_contract::SCHEMA_VERSION,
-            "teacher_prompt": raw_prompt,
-            "language": "id",
-            "teacher_intent": {
-                "type": "content_generation",
-                "goal": raw_prompt,
-                "preferred_delivery_mode": "async",
-                "requires_clarification": false,
-            },
-            "learning_objectives": [],
-            "constraints": {
-                "preferred_output_type": output_type,
-            },
-            "output_type_candidates": [{
-                "type": output_type,
-                "score": 1.0,
-                "reason": "Direct user request.",
-            }],
-            "resolved_output_type_reasoning": "User specified preferred output type.",
-            "document_blueprint": {
-                "title": raw_prompt,
-                "summary": raw_prompt,
-                "sections": [{
-                    "title": "Requested Content",
-                    "purpose": "Deliver the requested learning material.",
-                    "bullets": [],
-                    "estimated_length": "standard",
-                }],
-            },
-            "teacher_delivery_summary": "Delivered via async generation.",
-            "confidence": {
-                "score": 1.0,
-                "label": "high",
-            },
-        });
-
-        // Build a Python-compatible GenerationSpec payload that matches the
-        // Python service's pydantic model (models.GenerationSpec).
-        let unit_type = if output_type == "pptx" { "slide" } else { "page" };
-        let generation_spec_payload = serde_json::json!({
-            "schema_version": "media_generation_spec.v1",
-            "source_interpretation_schema_version": interp_contract::SCHEMA_VERSION,
-            "export_format": output_type,
-            "title": raw_prompt,
-            "language": "id",
-            "summary": raw_prompt,
-            "learning_objectives": [],
-            "sections": [{
-                "title": "Requested Content",
-                "purpose": "Deliver the requested learning material.",
-                "body_blocks": [{
-                    "type": "paragraph",
-                    "content": raw_prompt,
-                }],
-                "emphasis": "short",
-            }],
-            "layout_hints": {
-                "document_mode": if output_type == "pptx" { "slide_deck" } else { "document" },
-                "visual_density": "medium",
-                "section_count": 1,
-                "asset_count": 0,
-                "assessment_block_count": 0,
-            },
-            "style_hints": {
-                "tone": "educational",
-                "audience_level": "general",
-                "format_preferences": [output_type],
-            },
-            "page_or_slide_structure": {
-                "unit_type": unit_type,
-                "total_units": 1,
-                "opening_unit": false,
-                "section_units": 1,
-                "closing_unit": false,
-            },
-            "content_context": {},
-            "assets": [],
-            "assessment_or_activity_blocks": [],
-            "teacher_delivery_summary": "Delivered via async generation.",
-            "contract_versions": {
-                "generator_output_metadata": "media_generator_output_metadata.v1",
-            },
-        });
-
-        repo.update_payloads(
-            result.id,
-            &UpdatePayloadsPayload {
-                interpretation_payload: Some(interpretation_payload),
-                generation_spec_payload: Some(generation_spec_payload),
-                resolved_output_type: Some(output_type.to_string()),
-                ..Default::default()
-            },
-        )
-        .await
-        .map_err(|e| AppError::Internal(format!("failed to pre-populate classification: {e}")))?;
-
-        // Submit directly to Python service (fire-and-forget)
-        let python_client = PythonMediaGeneratorClient::new(
-            state.db_pool.clone(),
-            state.http.clone(),
-            &state.config,
-        );
-        if let Err(e) = python_client
-            .submit_job(&result.id.to_string(), &job_id.to_string())
-            .await
-        {
+        // Enqueue to Redis stream for async workflow processing.
+        // The worker will run the full LLM pipeline:
+        //   interpret (OpenRouter) → DecisionService → draft (OpenRouter) → generate (Python)
+        if let Some(ref redis_pool) = state.redis_pool {
+            let queue = crate::queue::redis_streams::QueueService::new(redis_pool.clone(), 1);
+            if let Err(e) = queue
+                .enqueue(&result.id.to_string(), &job_id.to_string(), 1)
+                .await
+            {
+                tracing::warn!(
+                    error = %e,
+                    generation_id = %result.id,
+                    job_id = %job_id,
+                    "failed to enqueue generation job to Redis stream"
+                );
+            } else {
+                tracing::info!(
+                    generation_id = %result.id,
+                    job_id = %job_id,
+                    "enqueued generation job to Redis stream for LLM workflow"
+                );
+            }
+        } else {
             tracing::warn!(
-                error = %e,
                 generation_id = %result.id,
                 job_id = %job_id,
-                "failed to submit job to Python service"
+                "Redis not configured — worker pipeline unavailable, job may not be processed"
             );
         }
 

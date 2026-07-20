@@ -309,6 +309,18 @@ pub trait MediaGenerationsRepo: Send + Sync {
         id: Uuid,
         payload: &UpdateClarificationStatePayload,
     ) -> anyhow::Result<MediaGeneration>;
+
+    /// Reset a generation for reprocessing with a new prompt.
+    ///
+    /// Updates `raw_prompt`, clears all classification payloads
+    /// (interpretation, decision, spec, delivery), and resets `status` to `queued`.
+    /// Used by the clarification flow to re-trigger the full LLM pipeline
+    /// (interpret → decide → draft → generate) on the enriched prompt.
+    async fn reset_for_reprocessing(
+        &self,
+        id: Uuid,
+        new_raw_prompt: &str,
+    ) -> anyhow::Result<MediaGeneration>;
 }
 
 // ─── Pg implementation ────────────────────────────────────────────────────────
@@ -773,6 +785,49 @@ impl MediaGenerationsRepo for PgMediaGenerationsRepo {
             .fetch_optional(&self.pool)
             .await
             .map_err(|e| anyhow::anyhow!("failed to update clarification state for {id}: {e}"))?;
+
+        generation.ok_or_else(|| anyhow::anyhow!("media generation {id} not found"))
+    }
+
+    async fn reset_for_reprocessing(
+        &self,
+        id: Uuid,
+        new_raw_prompt: &str,
+    ) -> anyhow::Result<MediaGeneration> {
+        let sql = format!(
+            r#"
+            UPDATE media_generations
+            SET raw_prompt = $2,
+                status = 'queued',
+                interpretation_payload = NULL,
+                interpretation_audit_payload = NULL,
+                generation_spec_payload = NULL,
+                decision_payload = NULL,
+                orchestration_audit_payload = NULL,
+                delivery_payload = NULL,
+                generator_service_response = NULL,
+                resolved_output_type = NULL,
+                llm_provider = NULL,
+                llm_model = NULL,
+                generator_provider = NULL,
+                generator_model = NULL,
+                error_code = NULL,
+                error_message = NULL,
+                generation_status = NULL,
+                generation_error_code = NULL,
+                generation_error_message = NULL,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING {MG_SELECT_COLS}
+            "#,
+        );
+
+        let generation = sqlx::query_as::<_, MediaGeneration>(&sql)
+            .bind(id)
+            .bind(new_raw_prompt)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to reset generation for reprocessing {id}: {e}"))?;
 
         generation.ok_or_else(|| anyhow::anyhow!("media generation {id} not found"))
     }

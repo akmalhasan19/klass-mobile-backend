@@ -14,11 +14,10 @@ use uuid::Uuid;
 use crate::auth::middleware::Principal;
 use crate::db::repositories::media_generations::{
     MediaGenerationsRepo, PgMediaGenerationsRepo, UpdateClarificationStatePayload,
-    UpdateGenerationJobStatusPayload, UpdatePayloadsPayload,
+    UpdateGenerationJobStatusPayload,
 };
 use crate::error::{AppError, AppResult};
 use crate::llm::clarification::{PreflightInput, ClarificationService};
-use crate::media_gen::python_client::PythonMediaGeneratorClient;
 use crate::orchestrator::submission::{CreateInput, ProviderMetadata, SubmissionService};
 use crate::state::AppState;
 
@@ -256,224 +255,141 @@ pub async fn confirm(
         ));
     }
 
-    let _generation_id = Uuid::parse_str(&payload.generation_id)
+    // Validate generation_id format (the actual lookup happens below)
+    let _ = Uuid::parse_str(&payload.generation_id)
         .map_err(|e| AppError::Validation(format!("generation_id tidak valid: {}", e)))?;
-
-    // Use the submission service to create or reuse a generation
-    let service = SubmissionService::new(state.db_pool.clone());
-
-    let input = CreateInput {
-        teacher_id: principal.user_id,
-        raw_prompt: payload.enriched_prompt.clone(),
-        preferred_output_type: payload
-            .answers
-            .get("output_type")
-            .cloned()
-            .or_else(|| Some("auto".to_string())),
-        subject_id: payload.subject_id,
-        sub_subject_id: payload.sub_subject_id,
-        provider_metadata: ProviderMetadata::default(),
-    };
-
-    let result = service
-        .create_or_reuse(input)
-        .await
-        .map_err(|e| AppError::Internal(format!("failed to create media generation: {e}")))?;
 
     let repo = PgMediaGenerationsRepo::new(state.db_pool.clone());
 
-    if result.was_created {
-        let job_id = Uuid::new_v4();
-
-        // Update DB with job_id and status='pending'
-        repo.update_generation_job_status(
-            result.id,
-            &UpdateGenerationJobStatusPayload {
-                generation_job_id: Some(job_id),
-                generation_status: "pending".to_string(),
-            },
-        )
+    // Check if the generation exists (should have been created by preflight)
+    let existing = repo
+        .find_by_id_for_teacher(generation_id, principal.user_id)
         .await
-        .map_err(|e| AppError::Internal(format!("failed to set generation job status: {e}")))?;
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        // Determine output type for the generation spec
-        let output_type_raw = payload
-            .answers
-            .get("output_type")
-            .map(|s| s.as_str())
-            .unwrap_or("docx");
-        let output_type = match output_type_raw {
-            "docx" | "pdf" | "pptx" => output_type_raw,
-            "handout" => "docx",
-            "worksheet" => "docx",
-            "slide" | "slides" | "presentation" => "pptx",
-            _ => "docx",
+    let gen_id = if let Some(gen) = existing {
+        let g = &gen.generation;
+
+        // If already in a terminal state or already processing, return existing
+        if g.status == "completed" || g.status == "failed" || g.status == "cancelled" {
+            let job_id = g.generation_job_id.unwrap_or_else(Uuid::new_v4);
+            let response_data = ConfirmResponseData {
+                generation_id: g.id.to_string(),
+                job_id: job_id.to_string(),
+                status: g.status.clone(),
+                poll_url: format!("/api/v1/media-generations/{}/job-status", g.id),
+            };
+            return Ok(response::accepted_with_message(
+                "Generasi media sudah dalam proses.",
+                response_data,
+            ));
+        }
+
+        g.id
+    } else {
+        // Generation not found — create a new one via SubmissionService
+        let service = SubmissionService::new(state.db_pool.clone());
+
+        let input = CreateInput {
+            teacher_id: principal.user_id,
+            raw_prompt: payload.enriched_prompt.clone(),
+            preferred_output_type: payload
+                .answers
+                .get("output_type")
+                .cloned()
+                .or_else(|| Some("auto".to_string())),
+            subject_id: payload.subject_id,
+            sub_subject_id: payload.sub_subject_id,
+            provider_metadata: ProviderMetadata::default(),
         };
 
-        // Build interpretation payload (simplified for clarification flow)
-        let interpretation_payload = serde_json::json!({
-            "schema_version": crate::contracts::prompt_interpretation::SCHEMA_VERSION,
-            "teacher_prompt": payload.enriched_prompt,
-            "language": "id",
-            "teacher_intent": {
-                "type": "content_generation",
-                "goal": payload.enriched_prompt,
-                "preferred_delivery_mode": "async",
-                "requires_clarification": false,
-            },
-            "learning_objectives": [],
-            "constraints": {
-                "preferred_output_type": output_type,
-            },
-            "output_type_candidates": [{
-                "type": output_type,
-                "score": 1.0,
-                "reason": "Teacher confirmed via clarification.",
-            }],
-            "resolved_output_type_reasoning": "Teacher selected via clarification flow.",
-            "document_blueprint": {
-                "title": payload.enriched_prompt,
-                "summary": payload.enriched_prompt,
-                "sections": [{
-                    "title": "Requested Content",
-                    "purpose": "Deliver the requested learning material.",
-                    "bullets": [],
-                    "estimated_length": "standard",
-                }],
-            },
-            "teacher_delivery_summary": "Delivered via async generation after clarification.",
-            "confidence": {
-                "score": 1.0,
-                "label": "high",
-            },
-        });
+        let result = service
+            .create_or_reuse(input)
+            .await
+            .map_err(|e| AppError::Internal(format!("failed to create media generation: {e}")))?;
 
-        // Build generation spec
-        let unit_type = if output_type == "pptx" { "slide" } else { "page" };
-        let generation_spec_payload = serde_json::json!({
-            "schema_version": "media_generation_spec.v1",
-            "source_interpretation_schema_version": crate::contracts::prompt_interpretation::SCHEMA_VERSION,
-            "export_format": output_type,
-            "title": payload.enriched_prompt,
-            "language": "id",
-            "summary": payload.enriched_prompt,
-            "learning_objectives": [],
-            "sections": [{
-                "title": "Requested Content",
-                "purpose": "Deliver the requested learning material.",
-                "body_blocks": [{
-                    "type": "paragraph",
-                    "content": payload.enriched_prompt,
-                }],
-                "emphasis": "short",
-            }],
-            "layout_hints": {
-                "document_mode": if output_type == "pptx" { "slide_deck" } else { "document" },
-                "visual_density": "medium",
-                "section_count": 1,
-                "asset_count": 0,
-                "assessment_block_count": 0,
-            },
-            "style_hints": {
-                "tone": "educational",
-                "audience_level": "general",
-                "format_preferences": [output_type],
-            },
-            "page_or_slide_structure": {
-                "unit_type": unit_type,
-                "total_units": 1,
-                "opening_unit": false,
-                "section_units": 1,
-                "closing_unit": false,
-            },
-            "content_context": {},
-            "assets": [],
-            "assessment_or_activity_blocks": [],
-            "teacher_delivery_summary": "Delivered via async generation after clarification.",
-            "contract_versions": {
-                "generator_output_metadata": "media_generator_output_metadata.v1",
-            },
-        });
+        result.id
+    };
 
-        // Store payloads
-        repo.update_payloads(
-            result.id,
-            &UpdatePayloadsPayload {
-                interpretation_payload: Some(interpretation_payload),
-                generation_spec_payload: Some(generation_spec_payload),
-                resolved_output_type: Some(output_type.to_string()),
-                ..Default::default()
-            },
-        )
+    // ── Reset generation for reprocessing via the full LLM workflow ─────
+    // Instead of hardcoding interpretation/spec payloads and submitting directly
+    // to Python (which bypassed the LLM and defaulted to "docx"), we now:
+    // 1. Update raw_prompt to the enriched prompt
+    // 2. Clear all classification payloads (forces the worker to re-classify)
+    // 3. Reset status to 'queued'
+    // 4. Enqueue to Redis stream for the worker to run the full LLM pipeline
+    repo.reset_for_reprocessing(gen_id, &payload.enriched_prompt)
         .await
-        .map_err(|e| AppError::Internal(format!("failed to update payloads: {e}")))?;
+        .map_err(|e| AppError::Internal(format!("failed to reset generation for reprocessing: {e}")))?;
 
-        // Save clarification state (Phase 2)
-        let clarification_state = serde_json::json!({
-            "answers": payload.answers,
-            "suggested_prompt": payload.enriched_prompt,
-            "generation_id": payload.generation_id,
-        });
-        repo.update_clarification_state(
-            result.id,
-            &UpdateClarificationStatePayload {
-                clarification_state: Some(clarification_state),
-                clarified_at: Some(chrono::Utc::now()),
-                clarification_skipped: false,
-            },
-        )
-        .await
-        .map_err(|e| AppError::Internal(format!("failed to update clarification state: {e}")))?;
+    // Save clarification state (Phase 2)
+    let clarification_state = serde_json::json!({
+        "answers": payload.answers,
+        "suggested_prompt": payload.enriched_prompt,
+        "generation_id": payload.generation_id,
+    });
+    repo.update_clarification_state(
+        gen_id,
+        &UpdateClarificationStatePayload {
+            clarification_state: Some(clarification_state),
+            clarified_at: Some(chrono::Utc::now()),
+            clarification_skipped: false,
+        },
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to update clarification state: {e}")))?;
 
-        // Submit to Python service (fire-and-forget)
-        let python_client = PythonMediaGeneratorClient::new(
-            state.db_pool.clone(),
-            state.http.clone(),
-            &state.config,
-        );
-        if let Err(e) = python_client
-            .submit_job(&result.id.to_string(), &job_id.to_string())
+    // Generate a new job_id and enqueue to Redis stream
+    let job_id = Uuid::new_v4();
+
+    // Update DB with job_id and status='pending'
+    repo.update_generation_job_status(
+        gen_id,
+        &UpdateGenerationJobStatusPayload {
+            generation_job_id: Some(job_id),
+            generation_status: "pending".to_string(),
+        },
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to set generation job status: {e}")))?;
+
+    // Enqueue to Redis stream for the worker to run the full LLM workflow
+    if let Some(ref redis_pool) = state.redis_pool {
+        let queue = crate::queue::redis_streams::QueueService::new(redis_pool.clone(), 1);
+        if let Err(e) = queue
+            .enqueue(&gen_id.to_string(), &job_id.to_string(), 1)
             .await
         {
             tracing::warn!(
                 error = %e,
-                generation_id = %result.id,
+                generation_id = %gen_id,
                 job_id = %job_id,
-                "failed to submit job to Python service"
+                "failed to enqueue confirm job to Redis stream"
+            );
+        } else {
+            tracing::info!(
+                generation_id = %gen_id,
+                job_id = %job_id,
+                "enqueued confirm job to Redis stream for LLM workflow"
             );
         }
-
-        let response_data = ConfirmResponseData {
-            generation_id: result.id.to_string(),
-            job_id: job_id.to_string(),
-            status: "pending".to_string(),
-            poll_url: format!("/api/v1/media-generations/{}/job-status", result.id),
-        };
-
-        return Ok(response::accepted_with_message(
-            "Generasi media berhasil dibuat dan sedang diproses.",
-            response_data,
-        ));
+    } else {
+        tracing::warn!(
+            generation_id = %gen_id,
+            job_id = %job_id,
+            "Redis not configured — worker pipeline unavailable for confirm"
+        );
     }
 
-    // Existing generation (duplicate) → return existing data
-    let generation = repo
-        .find_by_id_for_teacher(result.id, principal.user_id)
-        .await
-        .map_err(|e| AppError::Internal(format!("failed to fetch created generation: {e}")))?
-        .ok_or_else(|| AppError::Internal("created generation not found".into()))?;
-
-    let job_id = generation.generation.generation_job_id.unwrap_or_else(Uuid::new_v4);
-
     let response_data = ConfirmResponseData {
-        generation_id: result.id.to_string(),
+        generation_id: gen_id.to_string(),
         job_id: job_id.to_string(),
-        status: generation.generation.status.clone(),
-        poll_url: format!("/api/v1/media-generations/{}/job-status", result.id),
+        status: "pending".to_string(),
+        poll_url: format!("/api/v1/media-generations/{}/job-status", gen_id),
     };
 
     Ok(response::accepted_with_message(
-        "Generasi media berhasil dibuat.",
+        "Generasi media berhasil dibuat dan sedang diproses.",
         response_data,
     ))
 }
@@ -481,14 +397,17 @@ pub async fn confirm(
 /// POST /media-generations/{id}/skip-clarification
 ///
 /// Skips all clarification questions and generates with the enriched prompt.
-/// The enriched prompt is built from the original prompt + auto-detected values.
+/// Resets the generation for reprocessing via the full LLM workflow pipeline
+/// (interpret → decide → draft → generate), ensuring the output format is
+/// properly determined by the LLM interpretation + DecisionService rather than
+/// hardcoded defaults.
 #[utoipa::path(
     post,
     path = "/api/v1/media-generations/{id}/skip-clarification",
     tag = "media-generations",
     summary = "Skip clarification and generate with enriched prompt",
     description = "Skips all clarification questions and generates content using the \
-        auto-enriched prompt (original prompt + auto-detected values).",
+        auto-enriched prompt via the full LLM workflow pipeline.",
     params(
         ("id" = Uuid, Path, description = "Generation ID from preflight"),
     ),
@@ -511,7 +430,7 @@ pub async fn skip_clarification(
 
     let repo = PgMediaGenerationsRepo::new(state.db_pool.clone());
 
-    // Fetch the generation (should have been created by preflight or confirm)
+    // Fetch the generation (should have been created by preflight)
     let generation = repo
         .find_by_id_for_teacher(id, principal.user_id)
         .await
@@ -538,113 +457,16 @@ pub async fn skip_clarification(
     // Build enriched prompt from original prompt (auto-detected values)
     let enriched_prompt = ClarificationService::enrich_prompt(&gen.raw_prompt, &Default::default());
 
-    // Determine output type
-    let output_type_raw = gen.preferred_output_type.as_str();
-    let output_type = match output_type_raw {
-        "docx" | "pdf" | "pptx" => output_type_raw,
-        "handout" => "docx",
-        "worksheet" => "docx",
-        "slide" | "slides" | "presentation" => "pptx",
-        _ => "docx",
-    };
-
-    // Build interpretation payload
-    let interpretation_payload = serde_json::json!({
-        "schema_version": crate::contracts::prompt_interpretation::SCHEMA_VERSION,
-        "teacher_prompt": enriched_prompt,
-        "language": "id",
-        "teacher_intent": {
-            "type": "content_generation",
-            "goal": enriched_prompt,
-            "preferred_delivery_mode": "async",
-            "requires_clarification": false,
-        },
-        "learning_objectives": [],
-        "constraints": {
-            "preferred_output_type": output_type,
-        },
-        "output_type_candidates": [{
-            "type": output_type,
-            "score": 1.0,
-            "reason": "Teacher skipped clarification.",
-        }],
-        "resolved_output_type_reasoning": "Teacher skipped clarification, using auto-enriched prompt.",
-        "document_blueprint": {
-            "title": enriched_prompt,
-            "summary": enriched_prompt,
-            "sections": [{
-                "title": "Requested Content",
-                "purpose": "Deliver the requested learning material.",
-                "bullets": [],
-                "estimated_length": "standard",
-            }],
-        },
-        "teacher_delivery_summary": "Delivered via async generation (clarification skipped).",
-        "confidence": {
-            "score": 1.0,
-            "label": "high",
-        },
-    });
-
-    // Build generation spec
-    let unit_type = if output_type == "pptx" { "slide" } else { "page" };
-    let generation_spec_payload = serde_json::json!({
-        "schema_version": "media_generation_spec.v1",
-        "source_interpretation_schema_version": crate::contracts::prompt_interpretation::SCHEMA_VERSION,
-        "export_format": output_type,
-        "title": enriched_prompt,
-        "language": "id",
-        "summary": enriched_prompt,
-        "learning_objectives": [],
-        "sections": [{
-            "title": "Requested Content",
-            "purpose": "Deliver the requested learning material.",
-            "body_blocks": [{
-                "type": "paragraph",
-                "content": enriched_prompt,
-            }],
-            "emphasis": "short",
-        }],
-        "layout_hints": {
-            "document_mode": if output_type == "pptx" { "slide_deck" } else { "document" },
-            "visual_density": "medium",
-            "section_count": 1,
-            "asset_count": 0,
-            "assessment_block_count": 0,
-        },
-        "style_hints": {
-            "tone": "educational",
-            "audience_level": "general",
-            "format_preferences": [output_type],
-        },
-        "page_or_slide_structure": {
-            "unit_type": unit_type,
-            "total_units": 1,
-            "opening_unit": false,
-            "section_units": 1,
-            "closing_unit": false,
-        },
-        "content_context": {},
-        "assets": [],
-        "assessment_or_activity_blocks": [],
-        "teacher_delivery_summary": "Delivered via async generation (clarification skipped).",
-        "contract_versions": {
-            "generator_output_metadata": "media_generator_output_metadata.v1",
-        },
-    });
-
-    // Update payloads
-    repo.update_payloads(
-        id,
-        &UpdatePayloadsPayload {
-            interpretation_payload: Some(interpretation_payload),
-            generation_spec_payload: Some(generation_spec_payload),
-            resolved_output_type: Some(output_type.to_string()),
-            ..Default::default()
-        },
-    )
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to update payloads: {e}")))?;
+    // ── Reset generation for reprocessing via the full LLM workflow ─────
+    // Instead of hardcoding interpretation/spec payloads and submitting directly
+    // to Python (which bypassed the LLM and defaulted to "docx"), we now:
+    // 1. Update raw_prompt to the enriched prompt
+    // 2. Clear all classification payloads (forces the worker to re-classify)
+    // 3. Reset status to 'queued'
+    // 4. Enqueue to Redis stream for the worker to run the full LLM pipeline
+    repo.reset_for_reprocessing(id, &enriched_prompt)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to reset generation for reprocessing: {e}")))?;
 
     // Save clarification state as skipped (Phase 2)
     let clarification_state = serde_json::json!({
@@ -663,44 +485,47 @@ pub async fn skip_clarification(
     .await
     .map_err(|e| AppError::Internal(format!("failed to update clarification state: {e}")))?;
 
-    // If no job_id yet, create one and submit
-    let job_id = gen.generation_job_id.unwrap_or_else(|| {
-        let new_job_id = Uuid::new_v4();
-        // Fire-and-forget update
-        let repo = PgMediaGenerationsRepo::new(state.db_pool.clone());
-        let pool = state.db_pool.clone();
-        let http = state.http.clone();
-        let config = state.config.clone();
-        let gen_id = id;
-        let jid = new_job_id;
+    // Generate a new job_id and enqueue to Redis stream
+    let job_id = Uuid::new_v4();
 
-        tokio::spawn(async move {
-            let _ = repo
-                .update_generation_job_status(
-                    gen_id,
-                    &UpdateGenerationJobStatusPayload {
-                        generation_job_id: Some(jid),
-                        generation_status: "pending".to_string(),
-                    },
-                )
-                .await;
+    // Update DB with job_id and status='pending'
+    repo.update_generation_job_status(
+        id,
+        &UpdateGenerationJobStatusPayload {
+            generation_job_id: Some(job_id),
+            generation_status: "pending".to_string(),
+        },
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to set generation job status: {e}")))?;
 
-            let python_client = PythonMediaGeneratorClient::new(pool, http, &config);
-            if let Err(e) = python_client
-                .submit_job(&gen_id.to_string(), &jid.to_string())
-                .await
-            {
-                tracing::warn!(
-                    error = %e,
-                    generation_id = %gen_id,
-                    job_id = %jid,
-                    "failed to submit skip-clarification job to Python service"
-                );
-            }
-        });
-
-        new_job_id
-    });
+    // Enqueue to Redis stream for the worker to run the full LLM workflow
+    if let Some(ref redis_pool) = state.redis_pool {
+        let queue = crate::queue::redis_streams::QueueService::new(redis_pool.clone(), 1);
+        if let Err(e) = queue
+            .enqueue(&id.to_string(), &job_id.to_string(), 1)
+            .await
+        {
+            tracing::warn!(
+                error = %e,
+                generation_id = %id,
+                job_id = %job_id,
+                "failed to enqueue skip-clarification job to Redis stream"
+            );
+        } else {
+            tracing::info!(
+                generation_id = %id,
+                job_id = %job_id,
+                "enqueued skip-clarification job to Redis stream for LLM workflow"
+            );
+        }
+    } else {
+        tracing::warn!(
+            generation_id = %id,
+            job_id = %job_id,
+            "Redis not configured — worker pipeline unavailable for skip-clarification"
+        );
+    }
 
     let response_data = ConfirmResponseData {
         generation_id: id.to_string(),
