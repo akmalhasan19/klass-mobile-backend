@@ -26,7 +26,7 @@ fn mock_interpretation_response() -> String {
             "index": 0
         }],
         "usage": {"prompt_tokens": 200, "completion_tokens": 350, "total_tokens": 550},
-        "model": "xiaomi/mimo-v2.5"
+        "model": "gemini/gemini-2.5-flash-lite"
     }"#.to_string()
 }
 
@@ -38,19 +38,19 @@ fn mock_draft_response() -> String {
             "index": 0
         }],
         "usage": {"prompt_tokens": 400, "completion_tokens": 200, "total_tokens": 600},
-        "model": "xiaomi/mimo-v2.5"
+        "model": "gemini/gemini-2.5-flash-lite"
     }"#.to_string()
 }
 
 fn mock_respond_response() -> String {
     r#"{
         "choices": [{
-            "message": {"role": "assistant", "content": "{\"schema_version\":\"media_delivery_response.v1\",\"title\":\"Materi Pecahan\",\"preview_summary\":\"PDF materi pecahan kelas 5\",\"teacher_message\":\"Silakan unduh materi di bawah ini\",\"recommended_next_steps\":[\"Gunakan di kelas\"],\"classroom_tips\":[\"Diskusikan dengan siswa\"],\"artifact\":{\"output_type\":\"pdf\",\"title\":\"Materi Pecahan\",\"file_url\":\"https://storage.example.com/materi.pdf\",\"mime_type\":\"application/pdf\"},\"publication\":{\"topic\":{\"id\":\"t1\",\"title\":\"Pecahan\"},\"content\":null,\"recommended_project\":null},\"response_meta\":{\"generated_at\":\"2026-07-14T10:00:00Z\",\"llm_used\":true,\"provider\":\"xiaomi\",\"model\":\"mimo-v2.5\"}}"},
+            "message": {"role": "assistant", "content": "{\"schema_version\":\"media_delivery_response.v1\",\"title\":\"Materi Pecahan\",\"preview_summary\":\"PDF materi pecahan kelas 5\",\"teacher_message\":\"Silakan unduh materi di bawah ini\",\"recommended_next_steps\":[\"Gunakan di kelas\"],\"classroom_tips\":[\"Diskusikan dengan siswa\"],\"artifact\":{\"output_type\":\"pdf\",\"title\":\"Materi Pecahan\",\"file_url\":\"https://storage.example.com/materi.pdf\",\"mime_type\":\"application/pdf\"},\"publication\":{\"topic\":{\"id\":\"t1\",\"title\":\"Pecahan\"},\"content\":null,\"recommended_project\":null},\"response_meta\":{\"generated_at\":\"2026-07-14T10:00:00Z\",\"llm_used\":true,\"provider\":\"gemini\",\"model\":\"gemini-2.5-flash-lite\"}}"},
             "finish_reason": "stop",
             "index": 0
         }],
         "usage": {"prompt_tokens": 300, "completion_tokens": 250, "total_tokens": 550},
-        "model": "xiaomi/mimo-v2.5"
+        "model": "gemini/gemini-2.5-flash-lite"
     }"#.to_string()
 }
 
@@ -297,7 +297,7 @@ async fn test_mockito_interpret_endpoint() {
 
     let config = OpenRouterConfig {
         api_key: "test".to_string(),
-        model: "xiaomi/mimo-v2.5".to_string(),
+        model: "gemini/gemini-2.5-flash-lite".to_string(),
         base_url: server.url(),
         timeout_seconds: 10,
         retry_attempts: 1,
@@ -306,7 +306,7 @@ async fn test_mockito_interpret_endpoint() {
     let client = OpenRouterProviderClient::new(reqwest::Client::new(), config);
 
     let request = CompletionRequest::new(
-        "xiaomi/mimo-v2.5",
+        "gemini/gemini-2.5-flash-lite",
         vec![ChatMessage {
             role: "user".to_string(),
             content: "Buatkan materi pecahan".to_string(),
@@ -336,7 +336,7 @@ async fn test_mockito_draft_endpoint() {
 
     let config = OpenRouterConfig {
         api_key: "test".to_string(),
-        model: "xiaomi/mimo-v2.5".to_string(),
+        model: "gemini/gemini-2.5-flash-lite".to_string(),
         base_url: server.url(),
         timeout_seconds: 10,
         retry_attempts: 1,
@@ -345,7 +345,7 @@ async fn test_mockito_draft_endpoint() {
     let client = OpenRouterProviderClient::new(reqwest::Client::new(), config);
 
     let request = CompletionRequest::new(
-        "xiaomi/mimo-v2.5",
+        "gemini/gemini-2.5-flash-lite",
         vec![ChatMessage {
             role: "user".to_string(),
             content: "Generate draft content".to_string(),
@@ -375,7 +375,7 @@ async fn test_mockito_respond_endpoint() {
 
     let config = OpenRouterConfig {
         api_key: "test".to_string(),
-        model: "xiaomi/mimo-v2.5".to_string(),
+        model: "gemini/gemini-2.5-flash-lite".to_string(),
         base_url: server.url(),
         timeout_seconds: 10,
         retry_attempts: 1,
@@ -384,7 +384,7 @@ async fn test_mockito_respond_endpoint() {
     let client = OpenRouterProviderClient::new(reqwest::Client::new(), config);
 
     let request = CompletionRequest::new(
-        "xiaomi/mimo-v2.5",
+        "gemini/gemini-2.5-flash-lite",
         vec![ChatMessage {
             role: "user".to_string(),
             content: "Compose delivery".to_string(),

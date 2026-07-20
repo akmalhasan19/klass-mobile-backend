@@ -13,8 +13,8 @@ use crate::providers::{
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const DEFAULT_TIMEOUT_SECS: u64 = 90;
-const DEFAULT_RETRY_ATTEMPTS: u32 = 2;
+const DEFAULT_TIMEOUT_SECS: u64 = 30;
+const DEFAULT_RETRY_ATTEMPTS: u32 = 1;
 const DEFAULT_RETRY_BACKOFF_MS: u64 = 500;
 
 // ─── Configuration ───────────────────────────────────────────────────────────
@@ -24,7 +24,7 @@ const DEFAULT_RETRY_BACKOFF_MS: u64 = 500;
 pub struct OpenRouterConfig {
     /// OpenRouter API key (sk-or-...).
     pub api_key: String,
-    /// Default model name (e.g. "xiaomi/mimo-v2.5").
+    /// Default model name (e.g. "gemini/gemini-2.5-flash-lite").
     pub model: String,
     /// Base URL (e.g. "https://openrouter.ai/api/v1").
     pub base_url: String,
@@ -54,7 +54,7 @@ impl Default for OpenRouterConfig {
     fn default() -> Self {
         Self {
             api_key: String::new(),
-            model: "xiaomi/mimo-v2.5".to_string(),
+            model: "gemini/gemini-2.5-flash-lite".to_string(),
             base_url: "https://openrouter.ai/api/v1".to_string(),
             timeout_seconds: DEFAULT_TIMEOUT_SECS,
             retry_attempts: DEFAULT_RETRY_ATTEMPTS,
@@ -196,14 +196,14 @@ pub fn extract_content(raw: &serde_json::Value) -> Option<String> {
         .and_then(|c| c.as_str())
     {
         if !content.is_empty() {
-            return Some(content.to_string());
+            return Some(clean_markdown_json(content));
         }
     }
 
     // Strategy 2: output_text field
     if let Some(text) = raw.get("output_text").and_then(|v| v.as_str()) {
         if !text.is_empty() {
-            return Some(text.to_string());
+            return Some(clean_markdown_json(text));
         }
     }
 
@@ -222,7 +222,7 @@ pub fn extract_content(raw: &serde_json::Value) -> Option<String> {
             }
         }
         if !parts.is_empty() {
-            return Some(parts.join("\n"));
+            return Some(clean_markdown_json(&parts.join("\n")));
         }
     }
 
@@ -235,11 +235,27 @@ pub fn extract_content(raw: &serde_json::Value) -> Option<String> {
         .and_then(|t| t.as_str())
     {
         if !text.is_empty() {
-            return Some(text.to_string());
+            return Some(clean_markdown_json(text));
         }
     }
 
     None
+}
+
+/// Strip markdown formatting (```json ... ```) from a string.
+fn clean_markdown_json(raw: &str) -> String {
+    let mut trimmed = raw.trim();
+    if trimmed.starts_with("```json") {
+        trimmed = trimmed.trim_start_matches("```json").trim();
+    } else if trimmed.starts_with("```") {
+        trimmed = trimmed.trim_start_matches("```").trim();
+    }
+    
+    if trimmed.ends_with("```") {
+        trimmed = trimmed.trim_end_matches("```").trim();
+    }
+    
+    trimmed.to_string()
 }
 
 // ─── Helper: build request with JSON mode ────────────────────────────────────
@@ -247,7 +263,7 @@ pub fn extract_content(raw: &serde_json::Value) -> Option<String> {
 /// Create a `CompletionRequest` for structured JSON output.
 ///
 /// Does NOT set `response_format` because not all models/providers support
-/// it (e.g. xiaomi/hy3 via Novita only supports `json_schema`, not
+/// it (e.g. gemini/hy3 via Novita only supports `json_schema`, not
 /// `json_object`). The system prompt already instructs the model to return
 /// valid JSON, so the model will comply without the explicit format hint.
 pub fn json_mode_request(
@@ -276,7 +292,7 @@ mod tests {
     #[test]
     fn test_openrouter_config_default() {
         let config = OpenRouterConfig::default();
-        assert_eq!(config.model, "xiaomi/mimo-v2.5");
+        assert_eq!(config.model, "gemini/gemini-2.5-flash-lite");
         assert_eq!(config.timeout_seconds, 90);
         assert_eq!(config.retry_attempts, 2);
         assert_eq!(config.retry_backoff_ms, 500);
@@ -318,7 +334,7 @@ mod tests {
     fn test_from_app_config() {
         let config = crate::config::AppConfig {
             openrouter_api_key: "sk-or-test-key".to_string(),
-            openrouter_model: "xiaomi/mimo-v2.5".to_string(),
+            openrouter_model: "gemini/gemini-2.5-flash-lite".to_string(),
             openrouter_base_url: "https://openrouter.ai/api/v1".to_string(),
             host: "0.0.0.0".to_string(),
             port: 8080,
@@ -367,7 +383,7 @@ mod tests {
         };
         let or_config = OpenRouterConfig::from_app_config(&config);
         assert_eq!(or_config.api_key, "sk-or-test-key");
-        assert_eq!(or_config.model, "xiaomi/mimo-v2.5");
+        assert_eq!(or_config.model, "gemini/gemini-2.5-flash-lite");
         assert_eq!(or_config.timeout_seconds, 90);
     }
 
