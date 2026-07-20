@@ -225,7 +225,7 @@ impl SystemRecommendationAssignmentsRepo for PgSystemRecommendationAssignmentsRe
                 subject_id,
                 sub_subject_id,
                 COUNT(DISTINCT user_id)::BIGINT AS distinct_user_count,
-                MAX(last_distributed_at) AS latest_distribution_at
+                MAX(last_distributed_at)::TIMESTAMPTZ AS latest_distribution_at
             FROM system_recommendation_assignments
             WHERE source_type = ANY($1)
               AND source_reference IS NOT NULL
