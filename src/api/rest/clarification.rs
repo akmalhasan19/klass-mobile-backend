@@ -255,8 +255,7 @@ pub async fn confirm(
         ));
     }
 
-    // Validate generation_id format (the actual lookup happens below)
-    let _ = Uuid::parse_str(&payload.generation_id)
+    let generation_id = Uuid::parse_str(&payload.generation_id)
         .map_err(|e| AppError::Validation(format!("generation_id tidak valid: {}", e)))?;
 
     let repo = PgMediaGenerationsRepo::new(state.db_pool.clone());
