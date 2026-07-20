@@ -537,6 +537,16 @@ fn repair_interpretation_json(raw: &str) -> String {
 
 /// Repair a single section object from the interpretation blueprint.
 fn repair_section(s: &serde_json::Value) -> serde_json::Value {
+    // If the LLM returned a string instead of a section object, convert it.
+    if let Some(title_str) = s.as_str() {
+        return serde_json::json!({
+            "title": truncate_str(title_str, 200),
+            "purpose": truncate_str(title_str, 500),
+            "bullets": [truncate_str(title_str, 300)],
+            "estimated_length": "medium",
+        });
+    }
+
     let m = match s.as_object() {
         Some(m) => m,
         None => return s.clone(),
