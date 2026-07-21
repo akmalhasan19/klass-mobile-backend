@@ -4,9 +4,65 @@
 //! Uses `serde` for JSON deserialization and `garde` for field validation.
 
 use garde::Validate;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 pub const SCHEMA_VERSION: &str = "media_prompt_understanding.v1";
+
+/// Deserialize an optional i32 that may arrive as a string (e.g. "30" or "Menggunakan...").
+/// Returns None for null/missing, parses numeric strings, and strips non-numeric strings.
+fn deserialize_optional_i32<'de, D>(deserializer: D) -> Result<Option<i32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let val = serde_json::Value::deserialize(deserializer)?;
+    if val.is_null() {
+        return Ok(None);
+    }
+    match &val {
+        serde_json::Value::Number(n) => Ok(n.as_i64().map(|v| v as i32)),
+        serde_json::Value::String(s) => {
+            if let Ok(n) = s.trim().parse::<i32>() {
+                Ok(Some(n))
+            } else {
+                Ok(None)
+            }
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Deserialize an f64 that may arrive as a string (e.g. "0.8" or a sentence).
+fn deserialize_f64_lenient<'de, D>(deserializer: D) -> Result<f64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let val = serde_json::Value::deserialize(deserializer)?;
+    match &val {
+        serde_json::Value::Number(n) => Ok(n.as_f64().unwrap_or(0.6)),
+        serde_json::Value::String(s) => {
+            if let Ok(n) = s.trim().parse::<f64>() {
+                Ok(n)
+            } else {
+                Ok(0.6)
+            }
+        }
+        _ => Ok(0.6),
+    }
+}
+
+/// Deserialize a bool that may arrive as a string.
+fn deserialize_bool_lenient<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let val = serde_json::Value::deserialize(deserializer)?;
+    match &val {
+        serde_json::Value::Bool(b) => Ok(*b),
+        serde_json::Value::String(s) => Ok(s.to_lowercase() == "true"),
+        serde_json::Value::Number(n) => Ok(n.as_f64().unwrap_or(0.0) != 0.0),
+        _ => Ok(false),
+    }
+}
 
 // ─── Sub-types ──────────────────────────────────────────────────────────────
 
@@ -19,6 +75,7 @@ pub struct TeacherIntent {
     #[garde(length(min = 1, max = 100))]
     pub preferred_delivery_mode: String,
     #[garde(skip)]
+    #[serde(deserialize_with = "deserialize_bool_lenient")]
     pub requires_clarification: bool,
 }
 
@@ -28,7 +85,7 @@ pub struct InterpretationConstraints {
     #[serde(default = "default_preferred_output_type")]
     pub preferred_output_type: String,
     #[garde(skip)]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_optional_i32")]
     pub max_duration_minutes: Option<i32>,
     #[garde(skip)]
     #[serde(default)]
@@ -50,6 +107,7 @@ pub struct OutputCandidate {
     #[garde(length(min = 1, max = 100))]
     pub r#type: String,
     #[garde(skip)]
+    #[serde(deserialize_with = "deserialize_f64_lenient")]
     pub score: f64,
     #[garde(length(min = 1, max = 500))]
     pub reason: String,
@@ -137,6 +195,7 @@ pub struct Asset {
     #[garde(length(min = 1, max = 500))]
     pub description: String,
     #[garde(skip)]
+    #[serde(deserialize_with = "deserialize_bool_lenient")]
     pub required: bool,
 }
 
@@ -153,6 +212,7 @@ pub struct AssessmentBlock {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct Confidence {
     #[garde(skip)]
+    #[serde(deserialize_with = "deserialize_f64_lenient")]
     pub score: f64,
     #[garde(length(min = 1, max = 100))]
     pub label: String,
@@ -164,6 +224,7 @@ pub struct Confidence {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ContentIntegrity {
     #[garde(skip)]
+    #[serde(deserialize_with = "deserialize_f64_lenient")]
     pub integrity_score: f64,
     #[garde(skip)]
     #[serde(default)]
@@ -545,6 +606,9 @@ fn repair_interpretation_json(raw: &str) -> String {
             }
             if !m.contains_key("score") || m["score"].is_null() {
                 m.insert("score".to_string(), serde_json::json!(0.6));
+            } else if let Some(s) = m.get("score").and_then(|v| v.as_str()) {
+                let parsed = s.parse::<f64>().unwrap_or(0.6);
+                m.insert("score".to_string(), serde_json::json!(parsed));
             }
         }
     }
@@ -574,6 +638,37 @@ fn repair_interpretation_json(raw: &str) -> String {
             "resolved_output_type_reasoning".to_string(),
             serde_json::json!("Auto-selected based on content analysis."),
         );
+    }
+
+    // ── 10. Fix content_integrity.integrity_score (f64, required) ─────
+    if let Some(ci) = obj.get_mut("content_integrity") {
+        if let Some(m) = ci.as_object_mut() {
+            if !m.contains_key("integrity_score") || m["integrity_score"].is_null() {
+                m.insert("integrity_score".to_string(), serde_json::json!(0.8));
+            } else if let Some(s) = m.get("integrity_score").and_then(|v| v.as_str()) {
+                let parsed = s.parse::<f64>().unwrap_or(0.8);
+                m.insert("integrity_score".to_string(), serde_json::json!(parsed));
+            }
+            if !m.contains_key("classification_source") || m["classification_source"].is_null()
+                || m["classification_source"].as_str().map_or(false, |s| s.is_empty())
+            {
+                m.insert("classification_source".to_string(), serde_json::json!("llm_interpret"));
+            }
+        }
+    }
+
+    // ── 11. Fix assets[].required (bool) ──────────────────────────────
+    if let Some(assets) = obj.get_mut("assets").and_then(|v| v.as_array_mut()) {
+        for asset in assets.iter_mut() {
+            if let Some(m) = asset.as_object_mut() {
+                if !m.contains_key("required") || m["required"].is_null() {
+                    m.insert("required".to_string(), serde_json::json!(true));
+                } else if let Some(s) = m.get("required").and_then(|v| v.as_str()) {
+                    let parsed = s.to_lowercase() == "true";
+                    m.insert("required".to_string(), serde_json::json!(parsed));
+                }
+            }
+        }
     }
 
     serde_json::to_string(&serde_json::Value::Object(obj)).unwrap_or_else(|_| raw.to_string())
