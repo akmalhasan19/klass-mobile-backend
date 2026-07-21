@@ -264,9 +264,9 @@ fn test_completed_transition_payload_shape() {
         "schema_version": "media_generation_orchestration_audit.v1",
         "current_status": "completed",
         "provider_trace": {
-            "interpretation": { "name": "openrouter", "model": "gemini-2.5-flash-lite" },
+            "interpretation": { "name": "openrouter", "model": "minimax-m3" },
             "generator": { "name": "python-renderer", "model": "hf-space-v3" },
-            "delivery": { "name": "openrouter", "model": "gemini-2.5-flash-lite" },
+            "delivery": { "name": "openrouter", "model": "minimax-m3" },
         },
         "timing": {
             "queued_at": "2026-07-15T00:00:00Z",

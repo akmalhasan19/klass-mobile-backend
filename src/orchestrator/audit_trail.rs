@@ -1003,11 +1003,11 @@ mod tests {
     #[test]
     fn test_safe_throwable_context_filters_allowed_keys() {
         let ctx = serde_json::json!({
-            "http_status": 503,gemini
+            "http_status": 503,minimax
             "config": "default",
             "kind": "timeout",
             "adapter_provider": "xiaomi",
-            "adapter_model": "gemini-2.5-flash-lite",
+            "adapter_model": "minimax-m3",
             "adapter_fallback_used": true,
             "adapter_fallback_reason": "rate_limited",
             "secret_key": "should-not-appear",

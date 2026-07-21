@@ -754,7 +754,7 @@ mod tests {
         };
         let input = DraftInput {
             taxonomy_hint: Some(hint),
-            model: Some("gemini/gemini-2.5-flash-lite".to_string()),
+            model: Some("minimax/minimax-m3".to_string()),
             instruction: Some("Custom instruction".to_string()),
             ..sample_draft_input()
         };
@@ -763,7 +763,7 @@ mod tests {
             input.taxonomy_hint.as_ref().unwrap().subject_name.as_deref(),
             Some("Matematika")
         );
-        assert_eq!(input.model.as_deref(), Some("gemini/gemini-2.5-flash-lite"));
+        assert_eq!(input.model.as_deref(), Some("minimax/minimax-m3"));
     }
 
     #[test]
@@ -780,7 +780,7 @@ mod tests {
             source: "provider".to_string(),
             adapter_metadata: serde_json::json!({
                 "provider": "openrouter",
-                "model": "gemini/gemini-2.5-flash-lite",
+                "model": "minimax/minimax-m3",
             }),
             fallback_error: None,
             response_headers: HashMap::new(),
@@ -808,7 +808,7 @@ mod tests {
             source: "cache".to_string(),
             adapter_metadata: serde_json::json!({"cache_hit": true}),
             fallback_error: None,
-            response_headers: headers_for("openrouter", "gemini/gemini-2.5-flash-lite", true, false),
+            response_headers: headers_for("openrouter", "minimax/minimax-m3", true, false),
             latency_ms: Some(Decimal::new(300, 3)),
         };
         assert_eq!(result.source, "cache");
@@ -832,7 +832,7 @@ mod tests {
             source: "fallback".to_string(),
             adapter_metadata: serde_json::json!({"fallback": true}),
             fallback_error: Some("provider_response_contract_invalid".to_string()),
-            response_headers: headers_for("openrouter", "gemini/gemini-2.5-flash-lite", false, true),
+            response_headers: headers_for("openrouter", "minimax/minimax-m3", false, true),
             latency_ms: None,
         };
         assert_eq!(result.source, "fallback");
@@ -888,12 +888,12 @@ mod tests {
 
     #[test]
     fn test_headers_for() {
-        let h = headers_for("openrouter", "gemini/gemini-2.5-flash-lite", true, false);
+        let h = headers_for("openrouter", "minimax/minimax-m3", true, false);
         assert_eq!(h.get("x-klass-provider"), Some(&"openrouter".to_string()));
         assert_eq!(h.get("x-klass-cache-status"), Some(&"hit".to_string()));
         assert_eq!(h.get("x-klass-fallback-used"), Some(&"false".to_string()));
 
-        let h2 = headers_for("openrouter", "gemini/gemini-2.5-flash-lite", false, true);
+        let h2 = headers_for("openrouter", "minimax/minimax-m3", false, true);
         assert_eq!(h2.get("x-klass-cache-status"), Some(&"miss".to_string()));
         assert_eq!(h2.get("x-klass-fallback-used"), Some(&"true".to_string()));
     }

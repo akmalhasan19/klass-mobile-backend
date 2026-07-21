@@ -273,8 +273,8 @@ mod tests {
             "response_meta": {
                 "generated_at": "2026-04-03T10:00:00Z",
                 "llm_used": true,
-                "provider": "gemini",
-                "model": "gemini-2.5-flash-lite"
+                "provider": "minimax",
+                "model": "minimax-m3"
             }
         }"#;
         let result = decode_and_validate(json);
