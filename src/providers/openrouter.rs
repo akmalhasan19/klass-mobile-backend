@@ -242,20 +242,30 @@ pub fn extract_content(raw: &serde_json::Value) -> Option<String> {
     None
 }
 
-/// Strip markdown formatting (```json ... ```) from a string.
+/// Strip markdown formatting and conversational text to extract the raw JSON object.
 fn clean_markdown_json(raw: &str) -> String {
-    let mut trimmed = raw.trim();
-    if trimmed.starts_with("```json") {
-        trimmed = trimmed.trim_start_matches("```json").trim();
-    } else if trimmed.starts_with("```") {
-        trimmed = trimmed.trim_start_matches("```").trim();
+    let trimmed = raw.trim();
+    
+    // Most LLM conversational padding can be bypassed by finding the first '{' and last '}'
+    if let (Some(start), Some(end)) = (trimmed.find('{'), trimmed.rfind('}')) {
+        if start < end {
+            return trimmed[start..=end].to_string();
+        }
     }
     
-    if trimmed.ends_with("```") {
-        trimmed = trimmed.trim_end_matches("```").trim();
+    // Fallback just in case it doesn't contain braces (e.g. it's an array or bare string)
+    let mut stripped = trimmed;
+    if stripped.starts_with("```json") {
+        stripped = stripped.trim_start_matches("```json").trim();
+    } else if stripped.starts_with("```") {
+        stripped = stripped.trim_start_matches("```").trim();
     }
     
-    trimmed.to_string()
+    if stripped.ends_with("```") {
+        stripped = stripped.trim_end_matches("```").trim();
+    }
+    
+    stripped.to_string()
 }
 
 // ─── Helper: build request with JSON mode ────────────────────────────────────
