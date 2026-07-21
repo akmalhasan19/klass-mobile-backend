@@ -13,7 +13,7 @@ use crate::providers::{
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const DEFAULT_TIMEOUT_SECS: u64 = 30;
+const DEFAULT_TIMEOUT_SECS: u64 = 90;
 const DEFAULT_RETRY_ATTEMPTS: u32 = 1;
 const DEFAULT_RETRY_BACKOFF_MS: u64 = 500;
 
@@ -360,8 +360,8 @@ mod tests {
     #[test]
     fn test_openrouter_config_default() {
         let config = OpenRouterConfig::default();
-        assert_eq!(config.model, "minimax/minimax-m3");
-        assert_eq!(config.timeout_seconds, 30);
+        assert_eq!(config.model, "xiaomi/mimo-v2.5-pro");
+        assert_eq!(config.timeout_seconds, 90);
         assert_eq!(config.retry_attempts, 1);
         assert_eq!(config.retry_backoff_ms, 500);
     }
@@ -451,8 +451,8 @@ mod tests {
         };
         let or_config = OpenRouterConfig::from_app_config(&config);
         assert_eq!(or_config.api_key, "sk-or-test-key");
-        assert_eq!(or_config.model, "minimax/minimax-m3");
-        assert_eq!(or_config.timeout_seconds, 30);
+        assert_eq!(or_config.model, "xiaomi/mimo-v2.5-pro");
+        assert_eq!(or_config.timeout_seconds, 90);
     }
 
     // ── Content extraction ────────────────────────────────────────────────

@@ -524,6 +524,25 @@ fn repair_interpretation_json(raw: &str) -> String {
     }
 
     // ── 4. Fix document_blueprint ──────────────────────────────────────
+    if !obj.contains_key("document_blueprint") || obj["document_blueprint"].is_null() {
+        // Check if LLM returned key aliases: "blueprint" or "document"
+        if let Some(bp) = obj.remove("blueprint").or_else(|| obj.remove("document")) {
+            obj.insert("document_blueprint".to_string(), bp);
+        } else {
+            // Missing entirely — inject default blueprint from teacher_prompt
+            obj.insert("document_blueprint".to_string(), serde_json::json!({
+                "title": truncate_str(&teacher_prompt, 200),
+                "summary": truncate_str(&teacher_prompt, 1000),
+                "sections": [{
+                    "title": "Requested Content",
+                    "purpose": "Deliver the requested learning material.",
+                    "bullets": [truncate_str(&teacher_prompt, 300)],
+                    "estimated_length": "medium"
+                }]
+            }));
+        }
+    }
+
     if let Some(blueprint) = obj.get_mut("document_blueprint") {
         if let Some(bp) = blueprint.as_object_mut() {
             // Ensure title exists and is non-empty
@@ -1171,5 +1190,32 @@ mod tests {
         let payload = result.unwrap();
         assert!((payload.confidence.score - 0.6).abs() < f64::EPSILON);
         assert_eq!(payload.confidence.label, "medium");
+    }
+
+    #[test]
+    fn test_repair_missing_document_blueprint() {
+        let json = r#"{
+            "schema_version": "media_prompt_understanding.v1",
+            "teacher_prompt": "Buatkan materi pythagoras",
+            "language": "id"
+        }"#;
+        let result = decode_and_validate(json);
+        assert!(result.is_ok(), "repair should inject default document_blueprint: {:?}", result.err());
+        let payload = result.unwrap();
+        assert_eq!(payload.document_blueprint.title, "Buatkan materi pythagoras");
+        assert_eq!(payload.document_blueprint.sections.len(), 1);
+    }
+
+    #[test]
+    fn test_repair_document_blueprint_alias() {
+        let json = r#"{
+            "schema_version": "media_prompt_understanding.v1",
+            "teacher_prompt": "Buatkan materi",
+            "blueprint": {"title": "Alias Title", "summary": "Alias Summary", "sections": [{"title": "s", "purpose": "p", "bullets": ["b"], "estimated_length": "medium"}]}
+        }"#;
+        let result = decode_and_validate(json);
+        assert!(result.is_ok(), "repair should convert blueprint alias: {:?}", result.err());
+        let payload = result.unwrap();
+        assert_eq!(payload.document_blueprint.title, "Alias Title");
     }
 }
