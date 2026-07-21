@@ -437,7 +437,21 @@ fn repair_interpretation_json(raw: &str) -> String {
         }
     }
 
-    // ── 3. Fix document_blueprint ──────────────────────────────────────
+    // ── 3. Fix max_duration_minutes if it's a string ───────────────────
+    if let Some(constraints) = obj.get_mut("constraints").and_then(|v| v.as_object_mut()) {
+        if let Some(duration) = constraints.get("max_duration_minutes") {
+            if let Some(s) = duration.as_str() {
+                // If it's a string, try to parse it, otherwise remove it
+                if let Ok(num) = s.parse::<i32>() {
+                    constraints.insert("max_duration_minutes".to_string(), serde_json::json!(num));
+                } else {
+                    constraints.remove("max_duration_minutes");
+                }
+            }
+        }
+    }
+
+    // ── 4. Fix document_blueprint ──────────────────────────────────────
     if let Some(blueprint) = obj.get_mut("document_blueprint") {
         if let Some(bp) = blueprint.as_object_mut() {
             // Ensure title exists and is non-empty
