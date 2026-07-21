@@ -372,6 +372,16 @@ fn repair_interpretation_json(raw: &str) -> String {
         );
     }
 
+    // ── 1b. Fix teacher_prompt (required field) ──────────────────────
+    if !obj.contains_key("teacher_prompt") || obj["teacher_prompt"].is_null()
+        || obj["teacher_prompt"].as_str().map_or(false, |s| s.is_empty())
+    {
+        obj.insert(
+            "teacher_prompt".to_string(),
+            serde_json::json!(teacher_prompt),
+        );
+    }
+
     // ── 2. Fix output_type_candidates ─────────────────────────────────
     {
         let candidates = obj.get("output_type_candidates").cloned();
