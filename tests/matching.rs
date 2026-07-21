@@ -105,6 +105,9 @@ async fn seed_match_data(pool: &PgPool) -> MatchSeed {
         presigned_url_expires_at: None,
         generation_error_code: None,
         generation_error_message: None,
+        clarification_state: None,
+        clarified_at: None,
+        clarification_skipped: false,
         created_at: None,
         updated_at: None,
     };

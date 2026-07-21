@@ -141,12 +141,65 @@ impl FallbackProviderClient {
                             return Err(last_error.take().unwrap());
                         }
                     } else {
-                        // Deserialize into CompletionResponse
-                        let completion: CompletionResponse = response
-                            .json()
-                            .await
-                            .map_err(|e| ProviderError::Deserialization(e.to_string()))?;
-                        return Ok(completion);
+                        // ── Robust response parsing ──────────────────────
+                        let body_text = match response.text().await {
+                            Ok(t) => t,
+                            Err(e) => {
+                                last_error = Some(ProviderError::Deserialization(
+                                    format!("failed to read response body: {}", e),
+                                ));
+                                if attempt < self.config.retry_attempts.max(1) {
+                                    let delay = self.config.retry_backoff_ms * (1u64 << (attempt - 1));
+                                    tracing::debug!(
+                                        "fallback-adapter attempt {}/{} failed (body read) — retrying in {}ms",
+                                        attempt, self.config.retry_attempts, delay
+                                    );
+                                    tokio::time::sleep(Duration::from_millis(delay)).await;
+                                }
+                                continue;
+                            }
+                        };
+
+                        // Strategy 1: standard CompletionResponse deserialization
+                        match serde_json::from_str::<CompletionResponse>(&body_text) {
+                            Ok(completion) => return Ok(completion),
+                            Err(deser_err) => {
+                                // Strategy 2: fallback via extract_content()
+                                if let Ok(raw_value) = serde_json::from_str::<serde_json::Value>(&body_text) {
+                                    if let Some(content) = crate::providers::openrouter::extract_content(&raw_value) {
+                                        tracing::debug!(
+                                            "fallback-adapter: standard deser failed, extracted content via fallback"
+                                        );
+                                        let model = raw_value
+                                            .get("model")
+                                            .and_then(|v| v.as_str())
+                                            .map(String::from);
+                                        let usage: Option<super::Usage> = raw_value
+                                            .get("usage")
+                                            .and_then(|u| serde_json::from_value(u.clone()).ok());
+                                        return Ok(CompletionResponse {
+                                            choices: vec![super::Choice {
+                                                message: super::ChatMessage {
+                                                    role: "assistant".to_string(),
+                                                    content,
+                                                },
+                                                finish_reason: Some("stop".to_string()),
+                                                index: 0,
+                                            }],
+                                            usage,
+                                            model,
+                                        });
+                                    }
+                                }
+                                tracing::warn!(
+                                    "fallback-adapter: response deserialization failed: {}",
+                                    deser_err
+                                );
+                                last_error = Some(ProviderError::Deserialization(
+                                    format!("error decoding response body: {}", deser_err),
+                                ));
+                            }
+                        }
                     }
                 }
                 Err(e) => {

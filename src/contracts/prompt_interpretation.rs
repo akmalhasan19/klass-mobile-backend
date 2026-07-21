@@ -249,6 +249,7 @@ pub struct InterpretationPayload {
     #[garde(dive)]
     pub teacher_intent: TeacherIntent,
     #[garde(skip)]
+    #[serde(default)]
     pub learning_objectives: Vec<String>,
     #[garde(dive)]
     pub constraints: InterpretationConstraints,
@@ -583,6 +584,13 @@ fn repair_interpretation_json(raw: &str) -> String {
                 m.insert("requires_clarification".to_string(), serde_json::json!(false));
             }
         }
+    } else {
+        obj.insert("teacher_intent".to_string(), serde_json::json!({
+            "type": "generate_learning_media",
+            "goal": truncate_str(&teacher_prompt, 500),
+            "preferred_delivery_mode": "digital_download",
+            "requires_clarification": false,
+        }));
     }
 
     // ── 5. Fix constraints ─────────────────────────────────────────────
@@ -594,9 +602,18 @@ fn repair_interpretation_json(raw: &str) -> String {
                 m.insert("preferred_output_type".to_string(), serde_json::json!("auto"));
             }
         }
+    } else {
+        obj.insert("constraints".to_string(), serde_json::json!({
+            "preferred_output_type": "auto"
+        }));
     }
 
     // ── 6. Fix confidence ──────────────────────────────────────────────
+    // LLMs may return confidence as:
+    //   - An object: {"score": 0.95, "label": "high"}  (correct)
+    //   - A float:   0.95
+    //   - A string:  "high" or "0.95"
+    //   - null or missing entirely
     if let Some(confidence) = obj.get_mut("confidence") {
         if let Some(m) = confidence.as_object_mut() {
             if !m.contains_key("label") || m["label"].is_null()
@@ -610,7 +627,37 @@ fn repair_interpretation_json(raw: &str) -> String {
                 let parsed = s.parse::<f64>().unwrap_or(0.6);
                 m.insert("score".to_string(), serde_json::json!(parsed));
             }
+        } else {
+            // Confidence is a scalar (float, string, null) — wrap into struct
+            let (score, label) = match confidence.clone() {
+                serde_json::Value::Number(n) => {
+                    let s = n.as_f64().unwrap_or(0.6);
+                    let l = if s >= 0.8 { "high" } else if s >= 0.5 { "medium" } else { "low" };
+                    (s, l.to_string())
+                }
+                serde_json::Value::String(s) => {
+                    if let Ok(n) = s.trim().parse::<f64>() {
+                        let l = if n >= 0.8 { "high" } else if n >= 0.5 { "medium" } else { "low" };
+                        (n, l.to_string())
+                    } else {
+                        // String label like "high", "medium", "low"
+                        let label = s.trim().to_lowercase();
+                        let score = match label.as_str() {
+                            "high" | "very high" => 0.9,
+                            "medium" | "moderate" => 0.6,
+                            "low" | "very low" => 0.3,
+                            _ => 0.6,
+                        };
+                        (score, if label.is_empty() { "medium".to_string() } else { label })
+                    }
+                }
+                _ => (0.6, "medium".to_string()),
+            };
+            *confidence = serde_json::json!({"score": score, "label": label});
         }
+    } else {
+        // Confidence field missing entirely — inject default
+        obj.insert("confidence".to_string(), serde_json::json!({"score": 0.6, "label": "medium"}));
     }
 
     // ── 7. Fix teacher_delivery_summary ────────────────────────────────
@@ -669,6 +716,11 @@ fn repair_interpretation_json(raw: &str) -> String {
                 }
             }
         }
+    }
+
+    // ── 12. Fix learning_objectives ───────────────────────────────────
+    if !obj.contains_key("learning_objectives") || obj["learning_objectives"].is_null() {
+        obj.insert("learning_objectives".to_string(), serde_json::json!([]));
     }
 
     serde_json::to_string(&serde_json::Value::Object(obj)).unwrap_or_else(|_| raw.to_string())
@@ -1026,8 +1078,98 @@ mod tests {
             "constraints": {"preferred_output_type": "auto"},
             "confidence": {"score": 0.8, "label": "high"},
             "teacher_delivery_summary": "test"
-        }"#;
+        }\"#;
         let result = decode_and_validate(json);
         assert!(result.is_ok(), "repair should inject goal from prompt: {:?}", result.err());
+    }
+
+    // ── Confidence repair edge cases ─────────────────────────────────────
+
+    /// Helper: build a full interpretation JSON with a custom confidence value.
+    fn full_json_with_confidence(confidence_fragment: &str) -> String {
+        format!(r#"{{
+            "schema_version": "media_prompt_understanding.v1",
+            "teacher_prompt": "Buatkan materi matematika",
+            "language": "id",
+            "teacher_intent": {{"type": "generate_learning_media", "goal": "test", "preferred_delivery_mode": "digital_download", "requires_clarification": false}},
+            "output_type_candidates": [{{"type": "pdf", "score": 0.8, "reason": "test"}}],
+            "resolved_output_type_reasoning": "test",
+            "document_blueprint": {{"title": "test", "summary": "test", "sections": [{{"title": "s", "purpose": "p", "bullets": ["b"], "estimated_length": "medium"}}]}},
+            "constraints": {{"preferred_output_type": "auto"}},
+            "confidence": {},
+            "teacher_delivery_summary": "test"
+        }}"#, confidence_fragment)
+    }
+
+    #[test]
+    fn test_repair_confidence_as_float() {
+        // Exact scenario from production logs: LLM returns "confidence": 0.95
+        let json = full_json_with_confidence("0.95");
+        let result = decode_and_validate(&json);
+        assert!(result.is_ok(), "repair should wrap float confidence: {:?}", result.err());
+        let payload = result.unwrap();
+        assert!((payload.confidence.score - 0.95).abs() < f64::EPSILON);
+        assert_eq!(payload.confidence.label, "high");
+    }
+
+    #[test]
+    fn test_repair_confidence_as_low_float() {
+        let json = full_json_with_confidence("0.3");
+        let result = decode_and_validate(&json);
+        assert!(result.is_ok(), "repair should wrap low float confidence: {:?}", result.err());
+        let payload = result.unwrap();
+        assert!((payload.confidence.score - 0.3).abs() < f64::EPSILON);
+        assert_eq!(payload.confidence.label, "low");
+    }
+
+    #[test]
+    fn test_repair_confidence_as_string_number() {
+        let json = full_json_with_confidence(r#""0.85""#);
+        let result = decode_and_validate(&json);
+        assert!(result.is_ok(), "repair should parse string number confidence: {:?}", result.err());
+        let payload = result.unwrap();
+        assert!((payload.confidence.score - 0.85).abs() < f64::EPSILON);
+        assert_eq!(payload.confidence.label, "high");
+    }
+
+    #[test]
+    fn test_repair_confidence_as_string_label() {
+        let json = full_json_with_confidence(r#""high""#);
+        let result = decode_and_validate(&json);
+        assert!(result.is_ok(), "repair should convert string label confidence: {:?}", result.err());
+        let payload = result.unwrap();
+        assert!((payload.confidence.score - 0.9).abs() < f64::EPSILON);
+        assert_eq!(payload.confidence.label, "high");
+    }
+
+    #[test]
+    fn test_repair_confidence_as_null() {
+        let json = full_json_with_confidence("null");
+        let result = decode_and_validate(&json);
+        assert!(result.is_ok(), "repair should replace null confidence: {:?}", result.err());
+        let payload = result.unwrap();
+        assert!((payload.confidence.score - 0.6).abs() < f64::EPSILON);
+        assert_eq!(payload.confidence.label, "medium");
+    }
+
+    #[test]
+    fn test_repair_confidence_missing_entirely() {
+        // JSON without any confidence field
+        let json = r#"{
+            "schema_version": "media_prompt_understanding.v1",
+            "teacher_prompt": "Buatkan materi",
+            "language": "id",
+            "teacher_intent": {"type": "generate_learning_media", "goal": "test", "preferred_delivery_mode": "digital_download", "requires_clarification": false},
+            "output_type_candidates": [{"type": "pdf", "score": 0.8, "reason": "test"}],
+            "resolved_output_type_reasoning": "test",
+            "document_blueprint": {"title": "test", "summary": "test", "sections": [{"title": "s", "purpose": "p", "bullets": ["b"], "estimated_length": "medium"}]},
+            "constraints": {"preferred_output_type": "auto"},
+            "teacher_delivery_summary": "test"
+        }"#;
+        let result = decode_and_validate(json);
+        assert!(result.is_ok(), "repair should inject default confidence: {:?}", result.err());
+        let payload = result.unwrap();
+        assert!((payload.confidence.score - 0.6).abs() < f64::EPSILON);
+        assert_eq!(payload.confidence.label, "medium");
     }
 }

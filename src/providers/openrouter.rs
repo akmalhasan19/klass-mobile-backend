@@ -133,13 +133,71 @@ impl OpenRouterProviderClient {
                             return Err(last_error.take().unwrap());
                         }
                     } else {
-                        // Deserialize into CompletionResponse (standard format)
-                        let completion: CompletionResponse = response
-                            .json()
-                            .await
-                            .map_err(|e| ProviderError::Deserialization(e.to_string()))?;
+                        // ── Robust response parsing ──────────────────────
+                        // Read the body as text first so we can attempt
+                        // multiple deserialization strategies.
+                        let body_text = match response.text().await {
+                            Ok(t) => t,
+                            Err(e) => {
+                                last_error = Some(ProviderError::Deserialization(
+                                    format!("failed to read response body: {}", e),
+                                ));
+                                // retryable — continue to next attempt
+                                if attempt < self.config.retry_attempts.max(1) {
+                                    let delay = self.config.retry_backoff_ms * (1u64 << (attempt - 1));
+                                    tracing::debug!(
+                                        "openrouter attempt {}/{} failed (body read) — retrying in {}ms",
+                                        attempt, self.config.retry_attempts, delay
+                                    );
+                                    tokio::time::sleep(Duration::from_millis(delay)).await;
+                                }
+                                continue;
+                            }
+                        };
 
-                        return Ok(completion);
+                        // Strategy 1: standard CompletionResponse deserialization
+                        match serde_json::from_str::<CompletionResponse>(&body_text) {
+                            Ok(completion) => return Ok(completion),
+                            Err(deser_err) => {
+                                // Strategy 2: fallback via extract_content()
+                                // which handles output_text, content arrays,
+                                // choices[].text, and other non-standard formats.
+                                if let Ok(raw_value) = serde_json::from_str::<serde_json::Value>(&body_text) {
+                                    if let Some(content) = extract_content(&raw_value) {
+                                        tracing::debug!(
+                                            "openrouter: standard deser failed, extracted content via fallback"
+                                        );
+                                        let model = raw_value
+                                            .get("model")
+                                            .and_then(|v| v.as_str())
+                                            .map(String::from);
+                                        let usage: Option<super::Usage> = raw_value
+                                            .get("usage")
+                                            .and_then(|u| serde_json::from_value(u.clone()).ok());
+                                        return Ok(CompletionResponse {
+                                            choices: vec![super::Choice {
+                                                message: super::ChatMessage {
+                                                    role: "assistant".to_string(),
+                                                    content,
+                                                },
+                                                finish_reason: Some("stop".to_string()),
+                                                index: 0,
+                                            }],
+                                            usage,
+                                            model,
+                                        });
+                                    }
+                                }
+                                // Both strategies failed — retryable error
+                                tracing::warn!(
+                                    "openrouter: response deserialization failed: {}",
+                                    deser_err
+                                );
+                                last_error = Some(ProviderError::Deserialization(
+                                    format!("error decoding response body: {}", deser_err),
+                                ));
+                            }
+                        }
                     }
                 }
                 Err(e) => {
@@ -290,7 +348,7 @@ pub fn json_mode_request(
             role: "user".to_string(),
             content: user_prompt.to_string(),
         },
-    ])
+    ]).with_json_mode()
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -303,8 +361,8 @@ mod tests {
     fn test_openrouter_config_default() {
         let config = OpenRouterConfig::default();
         assert_eq!(config.model, "xiaomi/mimo-v2.5-pro");
-        assert_eq!(config.timeout_seconds, 90);
-        assert_eq!(config.retry_attempts, 2);
+        assert_eq!(config.timeout_seconds, 30);
+        assert_eq!(config.retry_attempts, 1);
         assert_eq!(config.retry_backoff_ms, 500);
     }
 
@@ -394,7 +452,7 @@ mod tests {
         let or_config = OpenRouterConfig::from_app_config(&config);
         assert_eq!(or_config.api_key, "sk-or-test-key");
         assert_eq!(or_config.model, "xiaomi/mimo-v2.5-pro");
-        assert_eq!(or_config.timeout_seconds, 90);
+        assert_eq!(or_config.timeout_seconds, 30);
     }
 
     // ── Content extraction ────────────────────────────────────────────────

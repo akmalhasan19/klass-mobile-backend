@@ -1003,7 +1003,7 @@ mod tests {
     #[test]
     fn test_safe_throwable_context_filters_allowed_keys() {
         let ctx = serde_json::json!({
-            "http_status": 503,xiaomi
+            "http_status": 503,
             "config": "default",
             "kind": "timeout",
             "adapter_provider": "xiaomi",
