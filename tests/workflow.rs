@@ -139,7 +139,7 @@ impl ComposeStep for MockCompose {
             "schema_version": "media_delivery_response.v1",
             "response_meta": {
                 "provider": "openrouter",
-                "model": "minimax-m3",
+                "model": "mimo-v2.5-pro",
                 "llm_used": true,
             },
             "fallback": { "triggered": false },

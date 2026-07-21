@@ -73,7 +73,7 @@ pub struct InterpretInput {
     pub subject_context: Option<NamedContext>,
     /// Optional sub_subject context provided by the caller.
     pub sub_subject_context: Option<NamedContext>,
-    /// Provider model override (e.g. "minimax/minimax-m3").
+    /// Provider model override (e.g. "xiaomi/mimo-v2.5-pro").
     /// If `None`, the default model from config is used.
     pub model: Option<String>,
     /// System instruction / prompt for the LLM. If `None`, uses the default.
@@ -962,7 +962,7 @@ mod tests {
                 name: "Gaya".to_string(),
                 slug: Some("gaya".to_string()),
             }),
-            model: Some("minimax/minimax-m3".to_string()),
+            model: Some("xiaomi/mimo-v2.5-pro".to_string()),
             instruction: Some("Custom instruction".to_string()),
         };
         assert!(input.subject_context.is_some());
@@ -1010,7 +1010,7 @@ mod tests {
             interpretation_payload: payload,
             interpretation_audit_payload: serde_json::json!({}),
             llm_provider: "openrouter".to_string(),
-            llm_model: "minimax/minimax-m3".to_string(),
+            llm_model: "xiaomi/mimo-v2.5-pro".to_string(),
             cache_hit: false,
             fallback_used: false,
             response_headers: HashMap::new(),
@@ -1020,7 +1020,7 @@ mod tests {
         assert!(!result.cache_hit);
         assert_eq!(
             result.llm_model,
-            "minimax/minimax-m3"
+            "xiaomi/mimo-v2.5-pro"
         );
     }
 
@@ -1038,7 +1038,7 @@ mod tests {
             interpretation_payload: payload,
             interpretation_audit_payload: serde_json::json!({}),
             llm_provider: "openrouter".to_string(),
-            llm_model: "minimax/minimax-m3".to_string(),
+            llm_model: "xiaomi/mimo-v2.5-pro".to_string(),
             cache_hit: true,
             fallback_used: false,
             response_headers: headers.clone(),
@@ -1098,12 +1098,12 @@ mod tests {
             },
             "response": {
                 "raw_completion": "{}",
-                "provider_model": "minimax/minimax-m3",
+                "provider_model": "xiaomi/mimo-v2.5-pro",
                 "finish_reason": null,
             },
             "used_fallback": false,
             "llm_provider": "openrouter",
-            "llm_model": "minimax/minimax-m3",
+            "llm_model": "xiaomi/mimo-v2.5-pro",
         });
         assert_eq!(inference["llm_provider"], "openrouter");
         assert_eq!(inference["used_fallback"], false);
@@ -1149,7 +1149,7 @@ mod tests {
             interpretation_payload: payload,
             interpretation_audit_payload: serde_json::json!({}),
             llm_provider: "openrouter".to_string(),
-            llm_model: "minimax/minimax-m3".to_string(),
+            llm_model: "xiaomi/mimo-v2.5-pro".to_string(),
             cache_hit: true,
             fallback_used: false,
             response_headers: HashMap::new(),

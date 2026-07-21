@@ -754,11 +754,11 @@ mod tests {
     #[test]
     fn test_respond_input_with_model() {
         let input = RespondInput {
-            model: Some("minimax/minimax-m3".to_string()),
+            model: Some("xiaomi/mimo-v2.5-pro".to_string()),
             instruction: Some("Custom respond instruction".to_string()),
             ..sample_input()
         };
-        assert_eq!(input.model.as_deref(), Some("minimax/minimax-m3"));
+        assert_eq!(input.model.as_deref(), Some("xiaomi/mimo-v2.5-pro"));
     }
 
     #[test]
@@ -809,7 +809,7 @@ mod tests {
             delivery_payload: payload,
             source: "provider".to_string(),
             llm_provider: Some("openrouter".to_string()),
-            llm_model: Some("minimax/minimax-m3".to_string()),
+            llm_model: Some("xiaomi/mimo-v2.5-pro".to_string()),
             llm_used: true,
             fallback_used: false,
             response_headers: HashMap::new(),
@@ -835,7 +835,7 @@ mod tests {
             llm_model: None,
             llm_used: false,
             fallback_used: true,
-            response_headers: respond_headers("openrouter", "minimax/minimax-m3", false, true),
+            response_headers: respond_headers("openrouter", "xiaomi/mimo-v2.5-pro", false, true),
             latency_ms: None,
         };
         assert_eq!(result.source, "fallback");
@@ -859,10 +859,10 @@ mod tests {
             delivery_payload: payload,
             source: "cache".to_string(),
             llm_provider: Some("openrouter".to_string()),
-            llm_model: Some("minimax/minimax-m3".to_string()),
+            llm_model: Some("xiaomi/mimo-v2.5-pro".to_string()),
             llm_used: true,
             fallback_used: false,
-            response_headers: respond_headers("openrouter", "minimax/minimax-m3", true, false),
+            response_headers: respond_headers("openrouter", "xiaomi/mimo-v2.5-pro", true, false),
             latency_ms: Some(Decimal::new(200, 3)),
         };
         assert_eq!(result.source, "cache");
@@ -918,12 +918,12 @@ mod tests {
 
     #[test]
     fn test_respond_headers() {
-        let h = respond_headers("openrouter", "minimax/minimax-m3", true, false);
+        let h = respond_headers("openrouter", "xiaomi/mimo-v2.5-pro", true, false);
         assert_eq!(h.get("x-klass-provider"), Some(&"openrouter".to_string()));
         assert_eq!(h.get("x-klass-cache-status"), Some(&"hit".to_string()));
         assert_eq!(h.get("x-klass-fallback-used"), Some(&"false".to_string()));
 
-        let h2 = respond_headers("openrouter", "minimax/minimax-m3", false, true);
+        let h2 = respond_headers("openrouter", "xiaomi/mimo-v2.5-pro", false, true);
         assert_eq!(h2.get("x-klass-cache-status"), Some(&"miss".to_string()));
         assert_eq!(h2.get("x-klass-fallback-used"), Some(&"true".to_string()));
     }

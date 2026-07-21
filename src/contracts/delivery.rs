@@ -273,8 +273,8 @@ mod tests {
             "response_meta": {
                 "generated_at": "2026-04-03T10:00:00Z",
                 "llm_used": true,
-                "provider": "minimax",
-                "model": "minimax-m3"
+                "provider": "xiaomi",
+                "model": "mimo-v2.5-pro"
             }
         }"#;
         let result = decode_and_validate(json);

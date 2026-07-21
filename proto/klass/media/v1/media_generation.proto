@@ -75,7 +75,7 @@ message GenerationProgressEvent {
   google.protobuf.Timestamp event_time = 4;
 
   // Metadata tambahan — opsional, spesifik per status.
-  // Contoh: { "interpretation_ms": "1234", "model": "minimax-2.0-flash" }
+  // Contoh: { "interpretation_ms": "1234", "model": "xiaomi-2.0-flash" }
   map<string, string> metadata = 5;
 
   // Delivery payload — hanya diisi ketika status == COMPLETED.
