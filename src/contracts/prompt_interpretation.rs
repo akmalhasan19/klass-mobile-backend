@@ -328,9 +328,29 @@ pub fn decode_and_validate(raw_json: &str) -> Result<InterpretationPayload, Cont
 /// 2. Missing `schema_version` → inject the correct version
 /// 3. Missing required string fields → inject sensible defaults
 fn repair_interpretation_json(raw: &str) -> String {
-    let parsed: serde_json::Value = match serde_json::from_str(raw) {
+    // Aggressively extract the JSON object to bypass LLM conversational padding
+    let trimmed = raw.trim();
+    let mut cleaned = trimmed.to_string();
+    
+    if let (Some(start), Some(end)) = (trimmed.find('{'), trimmed.rfind('}')) {
+        if start < end {
+            cleaned = trimmed[start..=end].to_string();
+        }
+    } else {
+        // Fallback markdown stripping
+        if cleaned.starts_with("```json") {
+            cleaned = cleaned.trim_start_matches("```json").trim().to_string();
+        } else if cleaned.starts_with("```") {
+            cleaned = cleaned.trim_start_matches("```").trim().to_string();
+        }
+        if cleaned.ends_with("```") {
+            cleaned = cleaned.trim_end_matches("```").trim().to_string();
+        }
+    }
+
+    let parsed: serde_json::Value = match serde_json::from_str(&cleaned) {
         Ok(v) => v,
-        Err(_) => return raw.to_string(), // not valid JSON, let parser handle the error
+        Err(_) => return cleaned, // not valid JSON, let parser handle the error
     };
 
     let mut obj = match parsed {

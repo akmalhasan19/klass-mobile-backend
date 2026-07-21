@@ -130,9 +130,29 @@ pub fn decode_and_validate(raw_json: &str) -> Result<ContentDraftPayload, Contra
 /// 4. Empty `teacher_delivery_summary` → use title as fallback
 /// 5. Section body_blocks with empty content → fill from purpose
 fn repair_draft_json(raw: &str) -> String {
-    let parsed: serde_json::Value = match serde_json::from_str(raw) {
+    // Aggressively extract the JSON object to bypass LLM conversational padding
+    let trimmed = raw.trim();
+    let mut cleaned = trimmed.to_string();
+    
+    if let (Some(start), Some(end)) = (trimmed.find('{'), trimmed.rfind('}')) {
+        if start < end {
+            cleaned = trimmed[start..=end].to_string();
+        }
+    } else {
+        // Fallback markdown stripping
+        if cleaned.starts_with("```json") {
+            cleaned = cleaned.trim_start_matches("```json").trim().to_string();
+        } else if cleaned.starts_with("```") {
+            cleaned = cleaned.trim_start_matches("```").trim().to_string();
+        }
+        if cleaned.ends_with("```") {
+            cleaned = cleaned.trim_end_matches("```").trim().to_string();
+        }
+    }
+
+    let parsed: serde_json::Value = match serde_json::from_str(&cleaned) {
         Ok(v) => v,
-        Err(_) => return raw.to_string(),
+        Err(_) => return cleaned,
     };
 
     let mut obj = match parsed {
