@@ -117,7 +117,7 @@ impl AppConfig {
             .set_default("rust_log", "info")?
             .set_default("log_format", "json")?
             .set_default("cors_allowed_origins", "")?
-            .set_default("openrouter_model", "xiaomi/mimo-v2.5-pro")?
+            .set_default("openrouter_model", "minimax/minimax-m3")?
             .set_default("openrouter_base_url", "https://openrouter.ai/api/v1")?
             .set_default("llm_adapter_fallback_url", "")?
             .set_default("media_gen_webhook_secret", "")?

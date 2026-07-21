@@ -432,8 +432,8 @@ impl RateLimitBucketsRepo {
 /// Check whether a request should be allowed, denied, or degraded.
 ///
 /// - `route`: `"interpret"` or `"respond"`
-/// - `provider`: e.g. `"xiaomi"`
-/// - `model`: e.g. `"mimo-v2.5-pro"`
+/// - `provider`: e.g. `"minimax"`
+/// - `model`: e.g. `"minimax-m3"`
 /// - `projected_cost_usd`: estimated cost of this request (for budget checks)
 ///
 /// Returns a `PreflightDecision`:

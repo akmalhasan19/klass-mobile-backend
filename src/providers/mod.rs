@@ -96,7 +96,7 @@ impl CompletionRequest {
 
     /// Enable JSON mode by setting `response_format: {type: "json_object"}`.
     ///
-    /// NOTE: Some models/providers (e.g. xiaomi/hy3 via Novita) do not support
+    /// NOTE: Some models/providers (e.g. minimax/hy3 via Novita) do not support
     /// `json_object` and only support `json_schema`. In those cases, the caller
     /// should rely on the system prompt to instruct JSON output and skip this.
     pub fn with_json_mode(mut self) -> Self {
@@ -196,13 +196,13 @@ mod tests {
     #[test]
     fn test_completion_request_new() {
         let req = CompletionRequest::new(
-            "xiaomi/mimo-v2.5-pro",
+            "minimax/minimax-m3",
             vec![ChatMessage {
                 role: "user".to_string(),
                 content: "Hi".to_string(),
             }],
         );
-        assert_eq!(req.model, "xiaomi/mimo-v2.5-pro");
+        assert_eq!(req.model, "minimax/minimax-m3");
         assert_eq!(req.messages.len(), 1);
     }
 
@@ -287,11 +287,11 @@ mod tests {
                 "index": 0
             }],
             "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
-            "model": "xiaomi/mimo-v2.5-pro"
+            "model": "minimax/minimax-m3"
         }"#;
         let resp: CompletionResponse = serde_json::from_str(json).unwrap();
         assert_eq!(resp.first_choice_content(), Some("Hi"));
-        assert_eq!(resp.model.as_deref(), Some("xiaomi/mimo-v2.5-pro"));
+        assert_eq!(resp.model.as_deref(), Some("minimax/minimax-m3"));
     }
 
     // ── Provider trait ────────────────────────────────────────────────────
