@@ -95,6 +95,40 @@ impl Default for DraftFallback {
     }
 }
 
+// ─── PPTX slide types ───────────────────────────────────────────────────────
+
+/// A single content item inside a PPTX slide (heading + body pair).
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct PptxSlideContentItem {
+    #[garde(skip)]
+    #[serde(default)]
+    pub heading: String,
+    #[garde(skip)]
+    #[serde(default)]
+    pub body: String,
+}
+
+/// A single slide in the PPTX presentation structure.
+///
+/// Produced by the LLM when using `DEFAULT_PPTX_DRAFT_INSTRUCTION`.
+/// Each slide has an explicit `layout_type` from the 8-layout catalog.
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct PptxSlide {
+    #[garde(skip)]
+    pub slide_number: u32,
+    #[garde(length(min = 1, max = 50))]
+    pub layout_type: String,
+    #[garde(length(min = 1, max = 200))]
+    #[serde(deserialize_with = "deserialize_string_lenient")]
+    pub title: String,
+    #[garde(skip)]
+    #[serde(default)]
+    pub subtitle: Option<String>,
+    #[garde(skip)]
+    #[serde(default)]
+    pub content: Vec<PptxSlideContentItem>,
+}
+
 // ─── Main payload ───────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -112,7 +146,7 @@ pub struct ContentDraftPayload {
     #[serde(default)]
     pub learning_objectives: Vec<String>,
     #[garde(dive)]
-    #[garde(length(min = 1))]
+    #[serde(default)]
     pub sections: Vec<ContentSection>,
     #[garde(length(min = 1, max = 1000))]
     #[serde(deserialize_with = "deserialize_string_lenient")]
@@ -120,6 +154,25 @@ pub struct ContentDraftPayload {
     #[garde(skip)]
     #[serde(default)]
     pub fallback: DraftFallback,
+
+    // ── PPTX-specific fields (optional, only present for slide output) ────
+
+    /// Structured slide definitions produced by the PPTX draft instruction.
+    /// When present, these take precedence over `sections` for building
+    /// the `SlideBlueprint` in the media generator.
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slides: Option<Vec<PptxSlide>>,
+
+    /// Presentation title suggested by the LLM (may differ from `title`).
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presentation_title: Option<String>,
+
+    /// Theme suggestion from the LLM: "dark_executive", "clean_light", or "modern_blue".
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme_suggestion: Option<String>,
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────
@@ -248,7 +301,14 @@ fn repair_draft_json(raw: &str) -> String {
         .map(|arr| !arr.is_empty())
         .unwrap_or(false);
 
-    if !has_valid_sections {
+    // PPTX drafts produce slides[] instead of sections[]; allow empty sections
+    // when structured slide data is present.
+    let has_valid_slides = obj.get("slides")
+        .and_then(|s| s.as_array())
+        .map(|arr| !arr.is_empty())
+        .unwrap_or(false);
+
+    if !has_valid_sections && !has_valid_slides {
         let title = obj.get("title")
             .and_then(|v| v.as_str())
             .unwrap_or("Content");
@@ -261,6 +321,9 @@ fn repair_draft_json(raw: &str) -> String {
             }],
             "emphasis": "medium"
         }]));
+    } else if !has_valid_sections && has_valid_slides {
+        // PPTX mode: ensure sections is a valid empty array
+        obj.insert("sections".to_string(), serde_json::json!([]));
     } else {
         // Repair each section
         let sections: Vec<serde_json::Value> = obj["sections"]
@@ -426,6 +489,9 @@ pub fn fallback_from_interpretation(
             reason_code: Some("provider_response_contract_invalid".to_string()),
             action: Some("fallback_from_interpretation".to_string()),
         },
+        slides: None,
+        presentation_title: None,
+        theme_suggestion: None,
     }
 }
 

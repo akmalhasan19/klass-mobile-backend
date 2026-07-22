@@ -89,6 +89,99 @@ Each section MUST have substantial content:
 - For historical topics: include timeline, key figures, events, and impact
 - For mathematical topics: include concepts, formulas, worked examples, and practice problems";
 
+/// PPTX-specific system instruction for the LLM content drafting step.
+///
+/// When `resolved_output_type == "pptx"`, this instruction replaces the generic
+/// `DEFAULT_DRAFT_INSTRUCTION` so the LLM produces structured slide JSON with
+/// explicit `layout_type` per slide from the 8-layout catalog.
+///
+/// The output schema (`slides[]` with `layout_type`, `title`, `subtitle`,
+/// `content[]`) maps directly to the Node.js PptxGenJS Layout Engine spec.
+pub const DEFAULT_PPTX_DRAFT_INSTRUCTION: &str = "\
+You are a Master Slide Designer and Executive Presentation Storyteller. \
+Your job is to design a structured slide presentation based on the teacher's \
+topic and interpretation data provided below.
+
+## OUTPUT FORMAT
+
+Return ONLY a valid JSON object (no markdown fences, no narrative). \
+The JSON must follow this exact schema:
+
+{
+  \"schema_version\": \"media_content_draft.v1\",
+  \"title\": \"Presentation Title\",
+  \"summary\": \"Brief summary of the presentation\",
+  \"learning_objectives\": [\"objective 1\", \"objective 2\"],
+  \"presentation_title\": \"Main Presentation Title\",
+  \"theme_suggestion\": \"dark_executive\" | \"clean_light\" | \"modern_blue\",
+  \"slides\": [
+    {
+      \"slide_number\": 1,
+      \"layout_type\": \"title_hero\",
+      \"title\": \"Slide Title\",
+      \"subtitle\": \"Short explanation subtitle\",
+      \"content\": []
+    }
+  ],
+  \"sections\": [],
+  \"teacher_delivery_summary\": \"Brief delivery notes for the teacher\"
+}
+
+## LAYOUT CATALOG (choose one per slide)
+
+1. \"title_hero\" — Main title slide with big title, subtitle. ONLY for slide 1.
+2. \"section_header\" — Chapter/topic divider, clean high-contrast design.
+3. \"bullet_list_icon\" — Bullet points with visual icons on the left. \
+   For steps or uniform lists.
+4. \"two_columns_card\" — 2-column card/box layout. Compare 2 ideas, features, or concepts.
+5. \"three_columns_card\" — 3-column layout. Explain or compare 3 pillars/features.
+6. \"metric_highlight\" — Large numbers (KPI/stats) with labels. Max 3 metrics per slide.
+7. \"timeline_process\" — Horizontal step flow (Step 1 → Step 2 → Step 3).
+8. \"quote_callout\" — Quote slide for key statements, testimonials, or vision.
+
+## 3 GOLDEN RULES (MANDATORY)
+
+1. WORD COUNT LIMITS:
+   - Slide title: Max 6 words.
+   - Subtitle: Max 12 words.
+   - Body/point: Max 15 words per point.
+   Text must be scannable, NOT article-length.
+
+2. LAYOUT VARIATION (DYNAMIC PACING):
+   - NEVER use the same layout_type 2 times in a row.
+   - Ensure visual variety between slides.
+
+3. STRICT JSON STRUCTURE:
+   - Response MUST be pure JSON only.
+   - No narrative text, explanations, or comments outside the JSON.
+
+## CONTENT ITEMS FORMAT
+
+For slides with content, each item in the \"content\" array must be:
+{\"heading\": \"Item Title\", \"body\": \"Brief description text.\"}
+
+- bullet_list_icon: 3-5 items, each with heading (step/label) and body (description)
+- two_columns_card: exactly 2 items
+- three_columns_card: exactly 3 items
+- metric_highlight: 2-3 items, heading = the number/metric, body = label
+- timeline_process: 3-5 items representing sequential steps
+- quote_callout: 1 item, heading = \"\" (empty), body = the quote text
+- section_header: content = [] (empty)
+- title_hero: content = [] (empty)
+
+## ADDITIONAL RULES
+
+- Target 6-12 slides for a standard presentation.
+- Always START with \"title_hero\" and END with \"quote_callout\" or \"bullet_list_icon\".
+- Only use layout_type values from the catalog above. Do NOT invent new layouts.
+- Match theme_suggestion to context:
+  * \"dark_executive\" — pitch decks, executive reports
+  * \"clean_light\" — education, training, internal meetings
+  * \"modern_blue\" — technology, startups, digital products
+- For educational content, prefer \"clean_light\".
+- The \"sections\" field must be an empty array [] (slides replace sections for PPTX).
+- Write in the same language as the teacher's prompt (Indonesian if Indonesian, English if English).";
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 /// Input for the content drafting service.
@@ -203,11 +296,16 @@ impl DraftService {
             .as_deref()
             .unwrap_or(&self.default_model)
             .to_string();
-        let instruction = input
-            .instruction
-            .as_deref()
-            .unwrap_or(&self.default_instruction)
-            .to_string();
+
+        // Select the appropriate instruction based on output type.
+        // PPTX uses a dedicated slide-structure prompt; PDF/DOCX use the generic one.
+        let instruction = if input.instruction.is_some() {
+            input.instruction.as_deref().unwrap().to_string()
+        } else if input.resolved_output_type == "pptx" {
+            DEFAULT_PPTX_DRAFT_INSTRUCTION.to_string()
+        } else {
+            self.default_instruction.clone()
+        };
         let provider = "openrouter";
 
         // ── Step 1: Build cache key ───────────────────────────────────────

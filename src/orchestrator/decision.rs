@@ -740,6 +740,17 @@ fn build_generation_spec(
         .unwrap_or("media_prompt_understanding.v1");
 
     // ── Build sections ────────────────────────────────────────────────────
+    // Extract PPTX slide data from draft payload (if present)
+    let pptx_slides: Option<&Value> = draft_payload
+        .and_then(|d| d.get("payload").unwrap_or(d).get("slides"))
+        .filter(|s| s.as_array().map(|a| !a.is_empty()).unwrap_or(false));
+    let pptx_presentation_title: Option<&str> = draft_payload
+        .and_then(|d| d.get("payload").unwrap_or(d).get("presentation_title"))
+        .and_then(|v| v.as_str());
+    let pptx_theme_suggestion: Option<&str> = draft_payload
+        .and_then(|d| d.get("payload").unwrap_or(d).get("theme_suggestion"))
+        .and_then(|v| v.as_str());
+
     let sections: Vec<Value> = if let Some(draft) = draft_payload {
         // Use draft content sections (support both envelope { "payload": ... } and direct { "sections": ... })
         let payload_obj = draft.get("payload").unwrap_or(draft);
@@ -1013,6 +1024,10 @@ fn build_generation_spec(
         "assets": assets,
         "assessment_or_activity_blocks": assessment_blocks,
         "teacher_delivery_summary": teacher_delivery_summary,
+        // PPTX-specific: pass through explicit slide structure from LLM draft
+        "pptx_slides": pptx_slides,
+        "pptx_presentation_title": pptx_presentation_title,
+        "pptx_theme_suggestion": pptx_theme_suggestion,
         "contract_versions": {
             "generator_output_metadata": "media_generator_output_metadata.v1"
         }
