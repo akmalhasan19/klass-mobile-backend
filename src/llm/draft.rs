@@ -108,6 +108,8 @@ pub struct DraftInput {
     pub model: Option<String>,
     /// System instruction / prompt for the LLM. If `None`, uses the default.
     pub instruction: Option<String>,
+    /// Whether to bypass cache lookup and force an LLM call.
+    pub bypass_cache: bool,
 }
 
 /// Taxonomy hint passed to the draft LLM for richer content generation.
@@ -273,72 +275,74 @@ impl DraftService {
         }
 
         // ── Step 3: Cache lookup ──────────────────────────────────────────
-        let cached = self
-            .cache_repo
-            .lookup(DRAFT_CACHE_ROUTE, &cache_key)
-            .await
-            .map_err(DraftError::Cache)?;
+        if !input.bypass_cache {
+            let cached = self
+                .cache_repo
+                .lookup(DRAFT_CACHE_ROUTE, &cache_key)
+                .await
+                .map_err(DraftError::Cache)?;
 
-        if let Some(entry) = cached {
-            let payload: ContentDraftPayload =
-                serde_json::from_value(entry.response_payload.clone()).map_err(|e| {
-                    DraftError::Contract(
-                        crate::contracts::prompt_interpretation::ContractValidationError {
-                            code: "cached_payload_corrupt",
-                            message: format!("Cached draft payload failed deserialization: {}", e),
-                            details: serde_json::json!({"deserialize_error": e.to_string()}),
-                            raw_completion: entry.response_payload.to_string(),
-                        },
+            if let Some(entry) = cached {
+                let payload: ContentDraftPayload =
+                    serde_json::from_value(entry.response_payload.clone()).map_err(|e| {
+                        DraftError::Contract(
+                            crate::contracts::prompt_interpretation::ContractValidationError {
+                                code: "cached_payload_corrupt",
+                                message: format!("Cached draft payload failed deserialization: {}", e),
+                                details: serde_json::json!({"deserialize_error": e.to_string()}),
+                                raw_completion: entry.response_payload.to_string(),
+                            },
+                        )
+                    })?;
+
+                let elapsed = start.elapsed();
+                let latency_ms = Decimal::new(elapsed.as_millis() as i64, 3);
+
+                let _ = self
+                    .ledger_repo
+                    .record_completed(
+                        &request_id,
+                        &input.generation_id,
+                        DRAFT_ROUTE,
+                        DRAFT_REQUEST_TYPE,
+                        provider,
+                        provider,
+                        &model,
+                        &model,
+                        Some(latency_ms),
+                        0,
+                        CacheStatus::Hit,
+                        None,
+                        None,
+                        None,
+                        Some(Decimal::ZERO),
+                        false,
+                        None,
+                        vec![provider.to_string()],
+                        Some(&cache_key),
+                        serde_json::json!({
+                            "source": "draft_service",
+                            "cache_hit": true,
+                            "cache_source": "content_draft_cache",
+                        }),
                     )
-                })?;
+                    .await;
 
-            let elapsed = start.elapsed();
-            let latency_ms = Decimal::new(elapsed.as_millis() as i64, 3);
-
-            let _ = self
-                .ledger_repo
-                .record_completed(
-                    &request_id,
-                    &input.generation_id,
-                    DRAFT_ROUTE,
-                    DRAFT_REQUEST_TYPE,
-                    provider,
-                    provider,
-                    &model,
-                    &model,
-                    Some(latency_ms),
-                    0,
-                    CacheStatus::Hit,
-                    None,
-                    None,
-                    None,
-                    Some(Decimal::ZERO),
-                    false,
-                    None,
-                    vec![provider.to_string()],
-                    Some(&cache_key),
-                    serde_json::json!({
-                        "source": "draft_service",
+                return Ok(DraftResult {
+                    request_id,
+                    generation_id: input.generation_id,
+                    draft_payload: payload,
+                    source: "cache".to_string(),
+                    adapter_metadata: serde_json::json!({
+                        "provider": provider,
+                        "model": model,
                         "cache_hit": true,
-                        "cache_source": "content_draft_cache",
                     }),
-                )
-                .await;
-
-            return Ok(DraftResult {
-                request_id,
-                generation_id: input.generation_id,
-                draft_payload: payload,
-                source: "cache".to_string(),
-                adapter_metadata: serde_json::json!({
-                    "provider": provider,
-                    "model": model,
-                    "cache_hit": true,
-                }),
-                fallback_error: None,
-                response_headers: headers_for(provider, &model, true, false),
-                latency_ms: Some(latency_ms),
-            });
+                    fallback_error: None,
+                    response_headers: headers_for(provider, &model, true, false),
+                    latency_ms: Some(latency_ms),
+                });
+            }
         }
 
         // ── Step 4: Cache miss – anti-stampede lock ──────────────────────
@@ -437,7 +441,7 @@ impl DraftService {
                 &instruction,
                 &cache_key,
                 start,
-                true,
+                !input.bypass_cache,
             )
             .await;
 
@@ -467,9 +471,6 @@ impl DraftService {
         start: Instant,
         should_cache: bool,
     ) -> Result<DraftResult, DraftError> {
-        let elapsed = start.elapsed();
-        let latency_ms = Decimal::new(elapsed.as_millis() as i64, 3);
-
         // Build the user payload from the interpretation
         let user_payload = serde_json::json!({
             "output_type": input.resolved_output_type,
@@ -507,6 +508,9 @@ impl DraftService {
         let completion_request = json_mode_request(model, instruction, &user_message);
 
         let provider_result = self.provider_router.complete(completion_request).await;
+
+        let elapsed = start.elapsed();
+        let latency_ms = Decimal::new(elapsed.as_millis() as i64, 3);
 
         match provider_result {
             Ok(response) => {
@@ -750,6 +754,7 @@ mod tests {
             taxonomy_hint: None,
             model: None,
             instruction: None,
+            bypass_cache: false,
         }
     }
 

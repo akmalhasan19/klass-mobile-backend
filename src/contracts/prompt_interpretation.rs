@@ -950,6 +950,19 @@ fn repair_interpretation_json(raw: &str) -> String {
     // ── 12. Fix learning_objectives ───────────────────────────────────
     if !obj.contains_key("learning_objectives") || obj["learning_objectives"].is_null() {
         obj.insert("learning_objectives".to_string(), serde_json::json!([]));
+    } else if let Some(arr) = obj.get("learning_objectives").and_then(|v| v.as_array()) {
+        let fixed: Vec<serde_json::Value> = arr
+            .iter()
+            .map(|item| match item {
+                serde_json::Value::String(s) => serde_json::json!(s),
+                serde_json::Value::Object(m) => {
+                    let text = m.values().next().and_then(|v| v.as_str()).unwrap_or("Objective");
+                    serde_json::json!(text)
+                }
+                other => serde_json::json!(other.to_string()),
+            })
+            .collect();
+        obj.insert("learning_objectives".to_string(), serde_json::json!(fixed));
     }
 
     // ── 13. Fix plan_mode ────────────────────────────────────────────
@@ -1141,7 +1154,11 @@ fn repair_section(s: &serde_json::Value) -> serde_json::Value {
         .and_then(|b| b.as_array())
         .map(|arr| {
             arr.iter()
-                .filter_map(|b| b.as_str().filter(|s| !s.is_empty()).map(|s| s.to_string()))
+                .filter_map(|b| match b {
+                    serde_json::Value::String(s) if !s.is_empty() => Some(s.clone()),
+                    serde_json::Value::Object(m) => m.values().next().and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    _ => None,
+                })
                 .collect()
         })
         .unwrap_or_default();

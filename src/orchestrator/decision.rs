@@ -969,7 +969,19 @@ fn build_generation_spec(
         "title": title,
         "language": language,
         "summary": summary,
-        "learning_objectives": interpretation.get("learning_objectives").cloned().unwrap_or(Value::Array(vec![])),
+        "learning_objectives": interpretation
+            .get("learning_objectives")
+            .and_then(|lo| lo.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .map(|v| match v {
+                        Value::String(s) => s.clone(),
+                        Value::Object(m) => m.values().next().and_then(|x| x.as_str()).unwrap_or("Objective").to_string(),
+                        other => other.to_string(),
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default(),
         "sections": sections,
         "layout_hints": {
             "document_mode": document_mode,
@@ -998,18 +1010,9 @@ fn build_generation_spec(
             "sub_subject_context": interpretation.get("sub_subject_context"),
             "target_audience": interpretation.get("target_audience"),
         },
-        "content_integrity": {
-            "integrity_score": 1.0,
-            "violations": [],
-            "classification_source": "fallback",
-            "metadata": { "synthetic": true },
-        },
         "assets": assets,
         "assessment_or_activity_blocks": assessment_blocks,
-        "teacher_delivery_summary": teacher_delivery_summary,
-        "contract_versions": {
-            "generator_output_metadata": "media_generator_output_metadata.v1"
-        }
+        "teacher_delivery_summary": teacher_delivery_summary
     })
 }
 

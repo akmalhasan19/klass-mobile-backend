@@ -223,6 +223,7 @@ impl DraftStep for DraftStepAdapter {
             taxonomy_hint: None,
             model: None,
             instruction: None,
+            bypass_cache: true,
         };
 
         let result = self

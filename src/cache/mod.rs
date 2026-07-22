@@ -442,7 +442,7 @@ mod tests {
             CacheRoute::Interpret, "minimax", "m", "t", "i", &input,
         );
         let key2 = build_cache_key(
-            CacheRoute::Interpret, "minimax", "m", "t", "i", &input,
+            CacheRoute::Interpret, "openai", "m", "t", "i", &input,
         );
         assert_ne!(key1, key2);
     }
