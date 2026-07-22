@@ -23,8 +23,9 @@
 use uuid::Uuid;
 
 use crate::standards::content_standards::{
-    detect_content_type, detect_output_type, detect_target_audience, get_clarification_fields,
-    get_minimum_requirements, ContentGap, ContentType, FieldDefinition, FieldPriority,
+    detect_content_type, detect_field_value_from_prompt, detect_output_type,
+    detect_target_audience, get_clarification_fields, get_minimum_requirements, ContentGap,
+    ContentType, FieldDefinition, FieldPriority,
 };
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -381,10 +382,25 @@ impl ClarificationService {
 
 // ─── Internal helpers ────────────────────────────────────────────────────
 
+/// Check if a field value in JSON is non-null, non-empty, and not default 'auto'.
+fn is_field_present_in_json(value: Option<&serde_json::Value>) -> bool {
+    match value {
+        None | Some(serde_json::Value::Null) => false,
+        Some(serde_json::Value::String(s)) => {
+            let trimmed = s.trim();
+            !trimmed.is_empty() && trimmed != "auto"
+        }
+        Some(serde_json::Value::Array(arr)) => !arr.is_empty(),
+        Some(serde_json::Value::Object(obj)) => !obj.is_empty(),
+        Some(serde_json::Value::Bool(_)) => true,
+        Some(serde_json::Value::Number(_)) => true,
+    }
+}
+
 /// Compute gaps: fields that need clarification.
 fn compute_gaps(
     standards: &[FieldDefinition],
-    _raw_prompt: &str,
+    raw_prompt: &str,
     detected_audience: Option<&str>,
     detected_output_type: Option<&str>,
     subject_id: Option<i64>,
@@ -398,6 +414,11 @@ fn compute_gaps(
             "output_type" if detected_output_type.is_some() => continue,
             "subject" if subject_id.is_some() => continue,
             _ => {}
+        }
+
+        // Skip if field keyword/value is present in raw prompt
+        if detect_field_value_from_prompt(field.field_id, raw_prompt).is_some() {
+            continue;
         }
 
         // Build question based on field type
@@ -420,7 +441,7 @@ fn compute_gaps(
 ///
 /// This is the core PLAN MODE comparison logic. It checks each required and
 /// recommended field from the content standards against what the LLM was able
-/// to extract from the teacher's prompt.
+/// to extract from the teacher's prompt or what was detected via keywords in prompt.
 fn compute_gaps_from_interpretation(
     required_fields: &[crate::standards::content_standards::MinimumRequirementField],
     recommended_fields: &[crate::standards::content_standards::MinimumRequirementField],
@@ -432,23 +453,12 @@ fn compute_gaps_from_interpretation(
     // Check required fields
     for field in required_fields {
         let value = interpreted.get(&field.field_id);
-        let is_present = value.is_some()
-            && !value.unwrap().is_null()
-            && value
-                .unwrap()
-                .as_str()
-                .map_or(!value.unwrap().is_array() || value.unwrap().as_array().map_or(false, |a| !a.is_empty()), |s| !s.is_empty());
+        let is_present = is_field_present_in_json(value);
 
         if !is_present {
-            // Also try to detect from raw prompt
-            let detected_from_prompt = match field.field_id.as_str() {
-                "target_audience" => detect_target_audience(raw_prompt),
-                "output_type" => detect_output_type(raw_prompt),
-                _ => None,
-            };
-
-            if detected_from_prompt.is_some() {
-                continue; // Field can be detected from prompt, skip
+            // Skip if field can be detected from prompt keywords (e.g. "5 halaman", "ppt/pptx/pdf/docx", grade, etc.)
+            if detect_field_value_from_prompt(&field.field_id, raw_prompt).is_some() {
+                continue;
             }
 
             gaps.push(ContentGap {
@@ -462,18 +472,18 @@ fn compute_gaps_from_interpretation(
         }
     }
 
-    // Check recommended fields (up to 3, since max questions = 5 and we may have required gaps)
+    // Check recommended fields (up to 5 max total gaps)
     let recommended_limit = 5usize.saturating_sub(gaps.len());
     for field in recommended_fields.iter().take(recommended_limit) {
         let value = interpreted.get(&field.field_id);
-        let is_present = value.is_some()
-            && !value.unwrap().is_null()
-            && value
-                .unwrap()
-                .as_str()
-                .map_or(!value.unwrap().is_array() || value.unwrap().as_array().map_or(false, |a| !a.is_empty()), |s| !s.is_empty());
+        let is_present = is_field_present_in_json(value);
 
         if !is_present {
+            // Skip if field can be detected from prompt keywords
+            if detect_field_value_from_prompt(&field.field_id, raw_prompt).is_some() {
+                continue;
+            }
+
             gaps.push(ContentGap {
                 field_id: field.field_id.clone(),
                 question: build_question_from_requirement(field),
@@ -967,5 +977,33 @@ mod tests {
         };
         let question = super::build_question_from_requirement(&field);
         assert!(question.contains("jenjang"));
+    }
+
+    #[test]
+    fn test_preflight_skips_gaps_when_keywords_in_prompt() {
+        // Prompt already contains "5 halaman", "ppt", and "kelas 5 SD"
+        let input = PreflightWithInterpretationInput {
+            raw_prompt: "Buatkan 5 halaman materi pecahan untuk kelas 5 SD format ppt".to_string(),
+            detected_content_type: Some("materi_pembelajaran".to_string()),
+            interpreted_fields: serde_json::json!({
+                "target_audience": null,
+                "output_type": null,
+                "page_count": null,
+            }),
+            confidence_score: Some(0.7),
+            llm_requires_clarification: Some(true),
+            preferred_output_type: None,
+            subject_id: None,
+            sub_subject_id: None,
+        };
+
+        let response = ClarificationService::preflight_with_interpretation(input);
+
+        // Required gaps (target_audience, output_type) and page_count should be skipped!
+        let field_ids: Vec<&str> = response.gaps.iter().map(|g| g.field_id.as_str()).collect();
+        assert!(!field_ids.contains(&"target_audience"));
+        assert!(!field_ids.contains(&"output_type"));
+        assert!(!field_ids.contains(&"page_count"));
+        assert!(response.is_ready);
     }
 }

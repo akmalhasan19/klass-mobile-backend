@@ -192,13 +192,24 @@ pub fn detect_content_type(prompt: &str) -> (ContentType, f64) {
 pub fn detect_output_type(prompt: &str) -> Option<String> {
     let lower = prompt.to_lowercase();
 
-    if lower.contains("pptx") || lower.contains("powerpoint") || lower.contains("slide") && !lower.contains("handout") {
+    if lower.contains("pptx")
+        || lower.contains("ppt")
+        || lower.contains("powerpoint")
+        || lower.contains("slide presentasi")
+        || (lower.contains("slide") && !lower.contains("handout"))
+        || lower.contains("presentasi")
+    {
         return Some("pptx".to_string());
     }
     if lower.contains("pdf") || lower.contains("cetak") || lower.contains("print") {
         return Some("pdf".to_string());
     }
-    if lower.contains("word") || lower.contains("docx") || lower.contains("edit") {
+    if lower.contains("docx")
+        || lower.contains("doc")
+        || lower.contains("word")
+        || lower.contains("dokumen")
+        || lower.contains("edit")
+    {
         return Some("docx".to_string());
     }
 
@@ -209,13 +220,16 @@ pub fn detect_output_type(prompt: &str) -> Option<String> {
 pub fn detect_target_audience(prompt: &str) -> Option<String> {
     let lower = prompt.to_lowercase();
 
-    // Pattern: "kelas X" or "grade X"
     let grade_patterns = [
         ("kelas 1", "SD Kelas 1"), ("kelas 2", "SD Kelas 2"), ("kelas 3", "SD Kelas 3"),
         ("kelas 4", "SD Kelas 4"), ("kelas 5", "SD Kelas 5"), ("kelas 6", "SD Kelas 6"),
         ("kelas 7", "SMP Kelas 7"), ("kelas 8", "SMP Kelas 8"), ("kelas 9", "SMP Kelas 9"),
         ("kelas 10", "SMA Kelas 10"), ("kelas 11", "SMA Kelas 11"), ("kelas 12", "SMA Kelas 12"),
-        ("sd", "SD"), ("smp", "SMP"), ("sma", "SMA"),
+        ("kelas x", "SMA Kelas 10"), ("kelas xi", "SMA Kelas 11"), ("kelas xii", "SMA Kelas 12"),
+        ("grade 1", "SD Kelas 1"), ("grade 2", "SD Kelas 2"), ("grade 3", "SD Kelas 3"),
+        ("grade 4", "SD Kelas 4"), ("grade 5", "SD Kelas 5"), ("grade 6", "SD Kelas 6"),
+        ("grade 7", "SMP Kelas 7"), ("grade 8", "SMP Kelas 8"), ("grade 9", "SMP Kelas 9"),
+        ("grade 10", "SMA Kelas 10"), ("grade 11", "SMA Kelas 11"), ("grade 12", "SMA Kelas 12"),
     ];
 
     for (pattern, label) in &grade_patterns {
@@ -224,7 +238,229 @@ pub fn detect_target_audience(prompt: &str) -> Option<String> {
         }
     }
 
+    let standalone_levels = [
+        ("sd", "SD"), ("smp", "SMP"), ("sma", "SMA"), ("smk", "SMK"), ("paud", "PAUD"), ("tk", "TK"),
+    ];
+
+    for (pattern, label) in &standalone_levels {
+        let regex_str = format!(r"\b{}\b", pattern);
+        if let Ok(re) = regex::Regex::new(&regex_str) {
+            if re.is_match(&lower) {
+                return Some(label.to_string());
+            }
+        }
+    }
+
     None
+}
+
+/// Detect page count requirement from raw prompt keywords/patterns.
+pub fn detect_page_count(prompt: &str) -> Option<String> {
+    let lower = prompt.to_lowercase();
+    if let Ok(re) = regex::Regex::new(r"(\d+)\s*(?:halaman|hal|lembar|pages?)") {
+        if let Some(caps) = re.captures(&lower) {
+            if let Some(num) = caps.get(1) {
+                return Some(num.as_str().to_string());
+            }
+        }
+    }
+    if lower.contains("jumlah halaman") || lower.contains("2-3 halaman") || lower.contains("5-7 halaman") || lower.contains("10+ halaman") {
+        return Some("specified".to_string());
+    }
+    None
+}
+
+/// Detect slide count requirement from raw prompt keywords/patterns.
+pub fn detect_slide_count(prompt: &str) -> Option<String> {
+    let lower = prompt.to_lowercase();
+    if let Ok(re) = regex::Regex::new(r"(\d+)\s*(?:slides?)") {
+        if let Some(caps) = re.captures(&lower) {
+            if let Some(num) = caps.get(1) {
+                return Some(num.as_str().to_string());
+            }
+        }
+    }
+    if lower.contains("jumlah slide") || lower.contains("8-10 slide") || lower.contains("15-20 slide") || lower.contains("25+ slide") {
+        return Some("specified".to_string());
+    }
+    None
+}
+
+/// Detect question count requirement from raw prompt keywords/patterns.
+pub fn detect_question_count(prompt: &str) -> Option<String> {
+    let lower = prompt.to_lowercase();
+    if let Ok(re) = regex::Regex::new(r"(\d+)\s*(?:soal|pertanyaan|item|nomor)") {
+        if let Some(caps) = re.captures(&lower) {
+            if let Some(num) = caps.get(1) {
+                return Some(num.as_str().to_string());
+            }
+        }
+    }
+    if lower.contains("jumlah soal") {
+        return Some("specified".to_string());
+    }
+    None
+}
+
+/// Detect difficulty level requirement from raw prompt.
+pub fn detect_difficulty_level(prompt: &str) -> Option<String> {
+    let lower = prompt.to_lowercase();
+    let levels = [
+        ("mudah", "mudah"), ("easy", "mudah"),
+        ("sedang", "sedang"), ("medium", "sedang"),
+        ("sulit", "sulit"), ("hard", "sulit"), ("hots", "sulit"),
+        ("campuran", "campuran"), ("mixed", "campuran"),
+    ];
+    for (lvl, val) in &levels {
+        let regex_str = format!(r"\b{}\b", lvl);
+        if let Ok(re) = regex::Regex::new(&regex_str) {
+            if re.is_match(&lower) {
+                return Some(val.to_string());
+            }
+        }
+    }
+    if lower.contains("tingkat kesulitan") || lower.contains("kesulitan") {
+        return Some("specified".to_string());
+    }
+    None
+}
+
+/// Detect include_activities requirement from raw prompt.
+pub fn detect_include_activities(prompt: &str) -> Option<String> {
+    let lower = prompt.to_lowercase();
+    if lower.contains("sertakan latihan")
+        || lower.contains("dengan latihan")
+        || lower.contains("ada latihan")
+        || lower.contains("tanpa latihan")
+        || lower.contains("latihan soal")
+    {
+        return Some("yes".to_string());
+    }
+    None
+}
+
+/// Detect meeting_duration requirement from raw prompt.
+pub fn detect_meeting_duration(prompt: &str) -> Option<String> {
+    let lower = prompt.to_lowercase();
+    if let Ok(re) = regex::Regex::new(r"(\d+)\s*(?:menit|jp)") {
+        if re.is_match(&lower) {
+            return Some("specified".to_string());
+        }
+    }
+    if lower.contains("2x45") || lower.contains("durasi pertemuan") {
+        return Some("specified".to_string());
+    }
+    None
+}
+
+/// Detect teaching_method requirement from raw prompt.
+pub fn detect_teaching_method(prompt: &str) -> Option<String> {
+    let lower = prompt.to_lowercase();
+    if lower.contains("metode")
+        || lower.contains("ceramah")
+        || lower.contains("diskusi")
+        || lower.contains("inquiry")
+        || lower.contains("inkuiri")
+        || lower.contains("pbl")
+        || lower.contains("pjbl")
+        || lower.contains("problem based")
+        || lower.contains("project based")
+    {
+        return Some("specified".to_string());
+    }
+    None
+}
+
+/// Detect assessment_method requirement from raw prompt.
+pub fn detect_assessment_method(prompt: &str) -> Option<String> {
+    let lower = prompt.to_lowercase();
+    if lower.contains("tes tertulis")
+        || lower.contains("tes lisan")
+        || lower.contains("portofolio")
+        || lower.contains("observasi")
+        || lower.contains("cara penilaian")
+    {
+        return Some("specified".to_string());
+    }
+    None
+}
+
+/// Detect question_type requirement from raw prompt.
+pub fn detect_question_type(prompt: &str) -> Option<String> {
+    let lower = prompt.to_lowercase();
+    if lower.contains("pilihan ganda")
+        || lower.contains("pg")
+        || lower.contains("essay")
+        || lower.contains("esai")
+        || lower.contains("uraian")
+        || lower.contains("benar/salah")
+        || lower.contains("benar salah")
+        || lower.contains("isian singkat")
+        || lower.contains("mcq")
+    {
+        return Some("specified".to_string());
+    }
+    None
+}
+
+/// Detect learning_objectives requirement from raw prompt.
+pub fn detect_learning_objectives(prompt: &str) -> Option<String> {
+    let lower = prompt.to_lowercase();
+    if lower.contains("tujuan pembelajaran")
+        || lower.contains("tujuan:")
+        || lower.contains("agar siswa")
+        || lower.contains("supaya siswa")
+        || lower.contains("capaian pembelajaran")
+    {
+        return Some("specified".to_string());
+    }
+    None
+}
+
+/// Detect visual_density requirement from raw prompt.
+pub fn detect_visual_density(prompt: &str) -> Option<String> {
+    let lower = prompt.to_lowercase();
+    if lower.contains("banyak gambar")
+        || lower.contains("fokus teks")
+        || lower.contains("tampilan slide")
+        || lower.contains("seimbang visual")
+    {
+        return Some("specified".to_string());
+    }
+    None
+}
+
+/// Detect speaker_notes requirement from raw prompt.
+pub fn detect_speaker_notes(prompt: &str) -> Option<String> {
+    let lower = prompt.to_lowercase();
+    if lower.contains("catatan presenter")
+        || lower.contains("catatan pembicara")
+        || lower.contains("speaker notes")
+    {
+        return Some("specified".to_string());
+    }
+    None
+}
+
+/// Detect if any requirement field is already specified in the prompt via keywords/patterns.
+pub fn detect_field_value_from_prompt(field_id: &str, prompt: &str) -> Option<String> {
+    match field_id {
+        "target_audience" => detect_target_audience(prompt),
+        "output_type" => detect_output_type(prompt),
+        "page_count" => detect_page_count(prompt),
+        "slide_count" => detect_slide_count(prompt),
+        "question_count" => detect_question_count(prompt),
+        "difficulty_level" => detect_difficulty_level(prompt),
+        "include_activities" => detect_include_activities(prompt),
+        "meeting_duration" => detect_meeting_duration(prompt),
+        "teaching_method" => detect_teaching_method(prompt),
+        "assessment_method" => detect_assessment_method(prompt),
+        "question_type" => detect_question_type(prompt),
+        "learning_objectives" => detect_learning_objectives(prompt),
+        "visual_density" => detect_visual_density(prompt),
+        "speaker_notes" => detect_speaker_notes(prompt),
+        _ => None,
+    }
 }
 
 // ─── Per-type standards ──────────────────────────────────────────────────
@@ -1171,5 +1407,33 @@ mod tests {
         assert_eq!(ta_field.field_id, "target_audience");
         assert!(!ta_field.suggestions.is_empty());
         assert_eq!(ta_field.suggestions.len(), 12); // SD 1-6, SMP 7-9, SMA 10-12
+    }
+
+    #[test]
+    fn test_detect_field_value_from_prompt_keywords() {
+        assert_eq!(
+            detect_field_value_from_prompt("page_count", "Buatkan 5 halaman materi pecahan"),
+            Some("5".to_string())
+        );
+        assert_eq!(
+            detect_field_value_from_prompt("output_type", "Buatkan ppt tentang pecahan"),
+            Some("pptx".to_string())
+        );
+        assert_eq!(
+            detect_field_value_from_prompt("output_type", "Format docx untuk kelas 5 SD"),
+            Some("docx".to_string())
+        );
+        assert_eq!(
+            detect_field_value_from_prompt("slide_count", "Buatkan 10 slide presentasi"),
+            Some("10".to_string())
+        );
+        assert_eq!(
+            detect_field_value_from_prompt("question_count", "Buatkan 5 soal latihan"),
+            Some("5".to_string())
+        );
+        assert_eq!(
+            detect_field_value_from_prompt("difficulty_level", "Tingkat kesulitan mudah"),
+            Some("mudah".to_string())
+        );
     }
 }
