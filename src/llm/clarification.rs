@@ -307,19 +307,52 @@ impl ClarificationService {
         raw_prompt: &str,
         answers: &std::collections::HashMap<String, String>,
     ) -> String {
-        let mut parts = vec![raw_prompt.trim().to_string()];
+        let raw_prompt_trimmed = raw_prompt.trim();
+        let mut parts = vec![raw_prompt_trimmed.to_string()];
+        let h_lower = raw_prompt_trimmed.to_lowercase();
 
-        // Append audience if answered
+        // Helper: check if haystack contains all tokens of the needle (case-insensitive)
+        let contains_all_tokens = |haystack: &str, needle: &str| -> bool {
+            let needle_clean = needle.replace('_', " ").to_lowercase();
+            let tokens: Vec<&str> = needle_clean.split_whitespace().collect();
+            if tokens.is_empty() {
+                return false;
+            }
+            tokens.into_iter().all(|t| haystack.contains(t))
+        };
+
+        // Helper: check if prompt already specifies quantity (number + unit synonyms)
+        let prompt_has_quantity = |haystack: &str, unit_synonyms: &[&str]| -> bool {
+            let has_digit = haystack.chars().any(|c| c.is_ascii_digit());
+            if !has_digit {
+                return false;
+            }
+            unit_synonyms.iter().any(|&syn| haystack.contains(&syn.to_lowercase()))
+        };
+
+        // 1. Append audience if answered and not already in prompt
         if let Some(audience) = answers.get("target_audience") {
-            parts.push(format!("Untuk jenjang {}", audience.replace('_', " ")));
+            let audience_clean = audience.replace('_', " ");
+            if !contains_all_tokens(&h_lower, &audience_clean) {
+                parts.push(format!("untuk jenjang {}", audience_clean));
+            }
         }
 
-        // Append output type if answered
+        // 2. Append output type if answered and not already in prompt
         if let Some(output) = answers.get("output_type") {
-            parts.push(format!("dalam format {}", output.to_uppercase()));
+            let output_upper = output.to_uppercase();
+            let has_format = match output.to_lowercase().as_str() {
+                "pptx" => ["ppt", "pptx", "powerpoint", "slide", "slides", "presentasi", "presentation", "slideshow"].iter().any(|&s| h_lower.contains(s)),
+                "pdf" => ["pdf", "dokumen pdf"].iter().any(|&s| h_lower.contains(s)),
+                "docx" => ["docx", "doc", "word", "dokumen word", "lembar kerja"].iter().any(|&s| h_lower.contains(s)),
+                _ => h_lower.contains(&output.to_lowercase()),
+            };
+            if !has_format {
+                parts.push(format!("dalam format {}", output_upper));
+            }
         }
 
-        // Append page count if answered
+        // 3. Append page count if answered and not already in prompt
         if let Some(pages) = answers.get("page_count") {
             let label = match pages.as_str() {
                 "short" => "2-3 halaman",
@@ -327,10 +360,13 @@ impl ClarificationService {
                 "long" => "10+ halaman",
                 _ => pages,
             };
-            parts.push(format!("sebanyak {} halaman", label));
+            let has_page_qty = prompt_has_quantity(&h_lower, &["halaman", "hal", "page", "pages", "pg", "pgs"]);
+            if !has_page_qty {
+                parts.push(format!("sebanyak {}", label));
+            }
         }
 
-        // Append slide count if answered
+        // 4. Append slide count if answered and not already in prompt
         if let Some(slides) = answers.get("slide_count") {
             let label = match slides.as_str() {
                 "short" => "8-10 slide",
@@ -338,39 +374,59 @@ impl ClarificationService {
                 "long" => "25+ slide",
                 _ => slides,
             };
-            parts.push(format!("sebanyak {} slide", label));
-        }
-
-        // Append learning objectives if answered
-        if let Some(objectives) = answers.get("learning_objectives") {
-            if !objectives.trim().is_empty() {
-                parts.push(format!("dengan tujuan pembelajaran: {}", objectives));
+            let has_slide_qty = prompt_has_quantity(&h_lower, &["slide", "slides", "halaman", "hal", "ppt", "pptx", "deck", "presentasi"]);
+            if !has_slide_qty {
+                parts.push(format!("sebanyak {}", label));
             }
         }
 
-        // Append difficulty level if answered
+        // 5. Append learning objectives if answered and not already in prompt
+        if let Some(objectives) = answers.get("learning_objectives") {
+            let objectives_trimmed = objectives.trim();
+            if !objectives_trimmed.is_empty() {
+                let obj_lower = objectives_trimmed.to_lowercase();
+                if !h_lower.contains(&obj_lower) {
+                    parts.push(format!("dengan tujuan pembelajaran: {}", objectives_trimmed));
+                }
+            }
+        }
+
+        // 6. Append difficulty level if answered and not already in prompt
         if let Some(difficulty) = answers.get("difficulty_level") {
-            parts.push(format!("tingkat kesulitan {}", difficulty));
+            let diff_lower = difficulty.to_lowercase();
+            if !h_lower.contains(&diff_lower) {
+                parts.push(format!("tingkat kesulitan {}", difficulty));
+            }
         }
 
-        // Append question count if answered
+        // 7. Append question count if answered and not already in prompt
         if let Some(count) = answers.get("question_count") {
-            parts.push(format!("dengan {} soal", count));
+            let has_q_qty = prompt_has_quantity(&h_lower, &["soal", "pertanyaan", "kuis", "quiz", "question", "questions"]);
+            if !has_q_qty {
+                parts.push(format!("dengan {} soal", count));
+            }
         }
 
-        // Append teaching method if answered
+        // 8. Append teaching method if answered and not already in prompt
         if let Some(method) = answers.get("teaching_method") {
-            parts.push(format!("dengan metode {}", method.replace('_', " ")));
+            let method_clean = method.replace('_', " ");
+            let method_lower = method_clean.to_lowercase();
+            if !h_lower.contains(&method_lower) {
+                parts.push(format!("dengan metode {}", method_clean));
+            }
         }
 
-        // Append include activities if answered
+        // 9. Append include activities if answered and not already in prompt
         if let Some(activities) = answers.get("include_activities") {
             if activities == "yes" {
-                parts.push("sertakan latihan/soal".to_string());
+                let has_activities = ["latihan", "soal", "kuis", "aktivitas", "activity", "exercise", "quiz"].iter().any(|&s| h_lower.contains(s));
+                if !has_activities {
+                    parts.push("sertakan latihan/soal".to_string());
+                }
             }
         }
 
-        // Append slide-by-slide contents if answered
+        // 10. Append slide-by-slide contents if answered
         let mut slide_contents = Vec::new();
         for i in 1..=20 {
             let key = format!("slide_{}", i);
@@ -392,9 +448,25 @@ impl ClarificationService {
             parts.push(format!("Rincian isi per slide:\n{}", slide_contents.join("\n")));
         }
 
-        // Join with ", " for natural language flow
-        let enriched = parts.join(", ");
-        // Clean up double commas or trailing punctuation issues
+        // Join parts together nicely
+        let mut enriched = parts[0].clone();
+        if parts.len() > 1 {
+            let has_slide_details = !slide_contents.is_empty();
+            let other_parts_count = parts.len() - if has_slide_details { 2 } else { 1 };
+            
+            if other_parts_count > 0 {
+                enriched.push_str(", ");
+                let comma_parts: Vec<String> = parts[1..=other_parts_count].to_vec();
+                enriched.push_str(&comma_parts.join(", "));
+            }
+            
+            if has_slide_details {
+                enriched.push_str(". ");
+                enriched.push_str(&parts[parts.len() - 1]);
+            }
+        }
+
+        // Clean up double commas, spaces, or trailing punctuation issues
         enriched
             .replace(", ,", ",")
             .replace(",.", ".")
@@ -736,6 +808,23 @@ mod tests {
         );
 
         assert_eq!(enriched, "Buatkan materi pecahan");
+    }
+
+    #[test]
+    fn test_enrich_prompt_deduplication() {
+        let mut answers = HashMap::new();
+        answers.insert("target_audience".to_string(), "SD_Kelas_5".to_string());
+        answers.insert("output_type".to_string(), "pptx".to_string());
+        answers.insert("slide_count".to_string(), "medium".to_string());
+
+        // The prompt already contains "ppt" and "5 slide" (digit + slide synonym) and "kelas 5 sd"
+        let enriched = ClarificationService::enrich_prompt(
+            "Buatkan aku 5 slide ppt materi pecahan untuk kelas 5 sd",
+            &answers,
+        );
+
+        // It should NOT append output_type ("pptx" / "PPTX") or slide_count ("sebanyak 15-20 slide") or target_audience ("SD Kelas 5")
+        assert_eq!(enriched, "Buatkan aku 5 slide ppt materi pecahan untuk kelas 5 sd");
     }
 
     #[test]
