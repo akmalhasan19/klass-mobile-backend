@@ -217,40 +217,30 @@ fn repair_draft_json(raw: &str) -> String {
     }
 
     // ── 2. Fix title ──────────────────────────────────────────────────
-    if !obj.contains_key("title") || obj["title"].is_null()
-        || obj["title"].as_str().map_or(false, |s| s.is_empty())
-    {
-        obj.insert(
-            "title".to_string(),
-            serde_json::json!("Untitled Draft"),
-        );
-    }
+    let title_str = obj.get("title")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("Untitled Draft")
+        .to_string();
 
-    // ── 3. Fix summary ────────────────────────────────────────────────
-    if !obj.contains_key("summary") || obj["summary"].is_null()
-        || obj["summary"].as_str().map_or(false, |s| s.is_empty())
-    {
-        let title = obj.get("title")
-            .and_then(|v| v.as_str())
-            .unwrap_or("No summary available.");
-        obj.insert(
-            "summary".to_string(),
-            serde_json::json!(truncate_str(title, 1000)),
-        );
-    }
+    let summary_str = obj.get("summary")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or(&title_str)
+        .to_string();
 
-    // ── 4. Fix teacher_delivery_summary ────────────────────────────────
-    if !obj.contains_key("teacher_delivery_summary") || obj["teacher_delivery_summary"].is_null()
-        || obj["teacher_delivery_summary"].as_str().map_or(false, |s| s.is_empty())
-    {
-        let title = obj.get("title")
-            .and_then(|v| v.as_str())
-            .unwrap_or("Deliver the requested learning material.");
-        obj.insert(
-            "teacher_delivery_summary".to_string(),
-            serde_json::json!(truncate_str(title, 1000)),
-        );
-    }
+    let delivery_str = obj.get("teacher_delivery_summary")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or(&title_str)
+        .to_string();
+
+    obj.insert("title".to_string(), serde_json::json!(truncate_str(&title_str, 200)));
+    obj.insert("summary".to_string(), serde_json::json!(truncate_str(&summary_str, 1000)));
+    obj.insert(
+        "teacher_delivery_summary".to_string(),
+        serde_json::json!(truncate_str(&delivery_str, 1000)),
+    );
 
     // ── 5. Fix sections ───────────────────────────────────────────────
     let has_valid_sections = obj.get("sections")
@@ -364,7 +354,7 @@ fn repair_draft_section(s: &serde_json::Value) -> serde_json::Value {
                     let content = content?;
                     Some(serde_json::json!({
                         "type": normalize_body_block_type(btype),
-                        "content": content,
+                        "content": truncate_str(&content, 1000),
                     }))
                 })
                 .collect()
