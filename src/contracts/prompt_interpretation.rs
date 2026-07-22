@@ -233,7 +233,155 @@ pub struct ContentIntegrity {
     pub classification_source: String,
     #[garde(skip)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<serde_json::Value>,
+    pub meta_repairs: Option<serde_json::Value>,
+}
+
+// ─── PLAN MODE types ─────────────────────────────────────────────────────
+
+/// PLAN MODE status — indicates whether the LLM detected missing fields
+/// that require teacher clarification before generation can proceed.
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct PlanMode {
+    /// Whether PLAN MODE is active (true = clarification needed).
+    #[garde(skip)]
+    #[serde(deserialize_with = "deserialize_bool_lenient")]
+    pub active: bool,
+    /// Reason why PLAN MODE was triggered (if active=true).
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// The content type detected by the LLM.
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detected_content_type: Option<String>,
+    /// Confidence of content type detection (0.0 - 1.0).
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_optional_f64")]
+    pub content_type_confidence: Option<f64>,
+}
+
+impl Default for PlanMode {
+    fn default() -> Self {
+        Self {
+            active: false,
+            reason: None,
+            detected_content_type: None,
+            content_type_confidence: None,
+        }
+    }
+}
+
+/// Deserialize an optional f64 that may arrive as a string.
+fn deserialize_optional_f64<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let val = serde_json::Value::deserialize(deserializer)?;
+    if val.is_null() {
+        return Ok(None);
+    }
+    match &val {
+        serde_json::Value::Number(n) => Ok(n.as_f64()),
+        serde_json::Value::String(s) => {
+            if let Ok(n) = s.trim().parse::<f64>() {
+                Ok(Some(n))
+            } else {
+                Ok(None)
+            }
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Fields that the LLM was able to interpret from the teacher's prompt.
+///
+/// These are the "best effort" extraction results. Null values indicate
+/// fields the LLM could not determine from the prompt.
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct InterpretedFields {
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_audience: Option<String>,
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_type: Option<String>,
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub topic: Option<String>,
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub learning_objectives: Option<Vec<String>>,
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_count: Option<String>,
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub difficulty_level: Option<String>,
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_bool_lenient_option")]
+    pub include_activities: Option<bool>,
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slide_count: Option<String>,
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub question_count: Option<i32>,
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub meeting_duration: Option<String>,
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub teaching_method: Option<String>,
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assessment_method: Option<String>,
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visual_density: Option<String>,
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speaker_notes: Option<String>,
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub question_type: Option<String>,
+}
+
+/// Deserialize an optional bool that may arrive as a string.
+fn deserialize_bool_lenient_option<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let val = serde_json::Value::deserialize(deserializer)?;
+    if val.is_null() {
+        return Ok(None);
+    }
+    match &val {
+        serde_json::Value::Bool(b) => Ok(Some(*b)),
+        serde_json::Value::String(s) => Ok(Some(s.to_lowercase() == "true")),
+        serde_json::Value::Number(n) => Ok(Some(n.as_f64().unwrap_or(0.0) != 0.0)),
+        _ => Ok(None),
+    }
+}
+
+/// A single missing field that needs clarification.
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct MissingField {
+    #[garde(length(min = 1, max = 50))]
+    pub field_id: String,
+    #[garde(length(min = 1, max = 100))]
+    pub field_label: String,
+    #[garde(length(min = 1, max = 20))]
+    pub priority: String,
+    #[garde(length(min = 1, max = 500))]
+    pub question: String,
+    #[garde(skip)]
+    #[serde(default)]
+    pub suggestions: Vec<serde_json::Value>,
+    #[garde(length(min = 1, max = 20))]
+    pub input_type: String,
 }
 
 // ─── Main payload ───────────────────────────────────────────────────────────
@@ -291,6 +439,25 @@ pub struct InterpretationPayload {
     #[garde(skip)]
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "_meta_repairs")]
     pub meta_repairs: Option<serde_json::Value>,
+
+    // ── PLAN MODE fields ──────────────────────────────────────────────────
+
+    /// PLAN MODE status — whether clarification is needed.
+    #[garde(skip)]
+    #[serde(default)]
+    pub plan_mode: PlanMode,
+
+    /// Fields that the LLM was able to interpret from the prompt.
+    /// Null values indicate fields the LLM could not determine.
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interpreted_fields: Option<InterpretedFields>,
+
+    /// Missing fields that need teacher clarification.
+    /// Only populated when plan_mode.active = true.
+    #[garde(skip)]
+    #[serde(default)]
+    pub missing_fields: Vec<MissingField>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -742,6 +909,161 @@ fn repair_interpretation_json(raw: &str) -> String {
         obj.insert("learning_objectives".to_string(), serde_json::json!([]));
     }
 
+    // ── 13. Fix plan_mode ────────────────────────────────────────────
+    if !obj.contains_key("plan_mode") || obj["plan_mode"].is_null() {
+        // Infer plan_mode from teacher_intent.requires_clarification
+        let requires_clarification = obj
+            .get("teacher_intent")
+            .and_then(|ti| ti.get("requires_clarification"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let confidence_score = obj
+            .get("confidence")
+            .and_then(|c| c.get("score"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.6);
+
+        // Low confidence or explicit clarification flag → activate plan mode
+        let plan_active = requires_clarification || confidence_score < 0.5;
+
+        let reason = if plan_active {
+            Some("Prompt lacks required information for media generation. Teacher clarification needed.".to_string())
+        } else {
+            None
+        };
+
+        obj.insert(
+            "plan_mode".to_string(),
+            serde_json::json!({
+                "active": plan_active,
+                "reason": reason,
+                "detected_content_type": null,
+                "content_type_confidence": confidence_score,
+            }),
+        );
+    } else if let Some(pm) = obj.get_mut("plan_mode") {
+        if let Some(m) = pm.as_object_mut() {
+            // Ensure 'active' field exists
+            if !m.contains_key("active") || m["active"].is_null() {
+                m.insert("active".to_string(), serde_json::json!(false));
+            }
+        }
+    }
+
+    // ── 14. Fix interpreted_fields ───────────────────────────────────
+    if !obj.contains_key("interpreted_fields") || obj["interpreted_fields"].is_null() {
+        // Build interpreted_fields from existing extracted data
+        let target_audience = obj
+            .get("target_audience")
+            .and_then(|ta| ta.get("label"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .or_else(|| {
+                obj.get("target_audience")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            });
+
+        let output_type = obj
+            .get("constraints")
+            .and_then(|c| c.get("preferred_output_type"))
+            .and_then(|v| v.as_str())
+            .filter(|s| *s != "auto")
+            .map(|s| s.to_string());
+
+        let subject = obj
+            .get("subject_context")
+            .and_then(|sc| sc.get("subject_name"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let topic = obj
+            .get("document_blueprint")
+            .and_then(|db| db.get("title"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let learning_objectives = obj
+            .get("learning_objectives")
+            .and_then(|lo| lo.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|v| !v.is_empty());
+
+        obj.insert(
+            "interpreted_fields".to_string(),
+            serde_json::json!({
+                "target_audience": target_audience,
+                "output_type": output_type,
+                "subject": subject,
+                "topic": topic,
+                "learning_objectives": learning_objectives,
+                "page_count": null,
+                "difficulty_level": null,
+                "include_activities": null,
+                "slide_count": null,
+                "question_count": null,
+                "meeting_duration": null,
+                "teaching_method": null,
+                "assessment_method": null,
+                "visual_density": null,
+                "speaker_notes": null,
+                "question_type": null,
+            }),
+        );
+    }
+
+    // ── 15. Fix missing_fields ───────────────────────────────────────
+    if !obj.contains_key("missing_fields") || obj["missing_fields"].is_null() {
+        obj.insert("missing_fields".to_string(), serde_json::json!([]));
+    } else if let Some(mf) = obj.get_mut("missing_fields") {
+        if let Some(arr) = mf.as_array_mut() {
+            // Ensure each missing field has required properties
+            let repaired: Vec<serde_json::Value> = arr
+                .iter()
+                .filter_map(|item| {
+                    if let Some(m) = item.as_object() {
+                        let field_id = m.get("field_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let field_label = m.get("field_label")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or(field_id);
+                        let priority = m.get("priority")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("required");
+                        let question = m.get("question")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let input_type = m.get("input_type")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("select");
+
+                        if field_id.is_empty() || question.is_empty() {
+                            return None; // Skip invalid entries
+                        }
+
+                        Some(serde_json::json!({
+                            "field_id": field_id,
+                            "field_label": field_label,
+                            "priority": priority,
+                            "question": question,
+                            "suggestions": m.get("suggestions").cloned().unwrap_or(serde_json::json!([])),
+                            "input_type": input_type,
+                        }))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            *arr = repaired;
+        }
+    }
+
     serde_json::to_string(&serde_json::Value::Object(obj)).unwrap_or_else(|_| raw.to_string())
 }
 
@@ -914,6 +1236,9 @@ pub fn fallback(teacher_prompt: &str) -> InterpretationPayload {
         },
         content_integrity: None,
         meta_repairs: None,
+        plan_mode: PlanMode::default(),
+        interpreted_fields: None,
+        missing_fields: vec![],
     }
 }
 
@@ -1217,5 +1542,198 @@ mod tests {
         assert!(result.is_ok(), "repair should convert blueprint alias: {:?}", result.err());
         let payload = result.unwrap();
         assert_eq!(payload.document_blueprint.title, "Alias Title");
+    }
+
+    // ── PLAN MODE tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_plan_mode_active_when_low_confidence() {
+        let json = r#"{
+            "schema_version": "media_prompt_understanding.v1",
+            "teacher_prompt": "Buatkan materi",
+            "language": "id",
+            "teacher_intent": {"type": "generate_learning_media", "goal": "test", "preferred_delivery_mode": "digital_download", "requires_clarification": false},
+            "output_type_candidates": [{"type": "pdf", "score": 0.8, "reason": "test"}],
+            "resolved_output_type_reasoning": "test",
+            "document_blueprint": {"title": "test", "summary": "test", "sections": [{"title": "s", "purpose": "p", "bullets": ["b"], "estimated_length": "medium"}]},
+            "constraints": {"preferred_output_type": "auto"},
+            "confidence": {"score": 0.3, "label": "low"},
+            "teacher_delivery_summary": "test"
+        }"#;
+        let result = decode_and_validate(json);
+        assert!(result.is_ok(), "decode failed: {:?}", result.err());
+        let payload = result.unwrap();
+        assert!(payload.plan_mode.active, "low confidence should trigger plan mode");
+        assert!(payload.plan_mode.reason.is_some());
+    }
+
+    #[test]
+    fn test_plan_mode_inactive_when_high_confidence() {
+        let json = r#"{
+            "schema_version": "media_prompt_understanding.v1",
+            "teacher_prompt": "Buatkan materi pecahan untuk kelas 5 SD format PDF",
+            "language": "id",
+            "teacher_intent": {"type": "generate_learning_media", "goal": "test", "preferred_delivery_mode": "digital_download", "requires_clarification": false},
+            "output_type_candidates": [{"type": "pdf", "score": 0.9, "reason": "test"}],
+            "resolved_output_type_reasoning": "test",
+            "document_blueprint": {"title": "test", "summary": "test", "sections": [{"title": "s", "purpose": "p", "bullets": ["b"], "estimated_length": "medium"}]},
+            "constraints": {"preferred_output_type": "pdf"},
+            "confidence": {"score": 0.85, "label": "high"},
+            "teacher_delivery_summary": "test"
+        }"#;
+        let result = decode_and_validate(json);
+        assert!(result.is_ok(), "decode failed: {:?}", result.err());
+        let payload = result.unwrap();
+        assert!(!payload.plan_mode.active, "high confidence should not trigger plan mode");
+    }
+
+    #[test]
+    fn test_plan_mode_active_when_requires_clarification() {
+        let json = r#"{
+            "schema_version": "media_prompt_understanding.v1",
+            "teacher_prompt": "Buatkan materi",
+            "language": "id",
+            "teacher_intent": {"type": "generate_learning_media", "goal": "test", "preferred_delivery_mode": "digital_download", "requires_clarification": true},
+            "output_type_candidates": [{"type": "pdf", "score": 0.8, "reason": "test"}],
+            "resolved_output_type_reasoning": "test",
+            "document_blueprint": {"title": "test", "summary": "test", "sections": [{"title": "s", "purpose": "p", "bullets": ["b"], "estimated_length": "medium"}]},
+            "constraints": {"preferred_output_type": "auto"},
+            "confidence": {"score": 0.7, "label": "medium"},
+            "teacher_delivery_summary": "test"
+        }"#;
+        let result = decode_and_validate(json);
+        assert!(result.is_ok(), "decode failed: {:?}", result.err());
+        let payload = result.unwrap();
+        assert!(payload.plan_mode.active, "requires_clarification=true should trigger plan mode");
+    }
+
+    #[test]
+    fn test_plan_mode_default_inactive() {
+        let json = r#"{
+            "schema_version": "media_prompt_understanding.v1",
+            "teacher_prompt": "Buatkan materi",
+            "language": "id",
+            "teacher_intent": {"type": "generate_learning_media", "goal": "test", "preferred_delivery_mode": "digital_download", "requires_clarification": false},
+            "output_type_candidates": [{"type": "pdf", "score": 0.8, "reason": "test"}],
+            "resolved_output_type_reasoning": "test",
+            "document_blueprint": {"title": "test", "summary": "test", "sections": [{"title": "s", "purpose": "p", "bullets": ["b"], "estimated_length": "medium"}]},
+            "constraints": {"preferred_output_type": "auto"},
+            "confidence": {"score": 0.6, "label": "medium"},
+            "teacher_delivery_summary": "test"
+        }"#;
+        let result = decode_and_validate(json);
+        assert!(result.is_ok(), "decode failed: {:?}", result.err());
+        let payload = result.unwrap();
+        // Medium confidence (0.6) should NOT trigger plan mode (threshold is 0.5)
+        assert!(!payload.plan_mode.active);
+    }
+
+    #[test]
+    fn test_interpreted_fields_populated() {
+        let json = r#"{
+            "schema_version": "media_prompt_understanding.v1",
+            "teacher_prompt": "Buatkan materi pecahan untuk kelas 5 SD",
+            "language": "id",
+            "teacher_intent": {"type": "generate_learning_media", "goal": "test", "preferred_delivery_mode": "digital_download", "requires_clarification": false},
+            "output_type_candidates": [{"type": "pdf", "score": 0.8, "reason": "test"}],
+            "resolved_output_type_reasoning": "test",
+            "document_blueprint": {"title": "test", "summary": "test", "sections": [{"title": "s", "purpose": "p", "bullets": ["b"], "estimated_length": "medium"}]},
+            "constraints": {"preferred_output_type": "auto"},
+            "confidence": {"score": 0.8, "label": "high"},
+            "teacher_delivery_summary": "test",
+            "interpreted_fields": {
+                "target_audience": "SD Kelas 5",
+                "output_type": null,
+                "subject": "Matematika",
+                "topic": "pecahan",
+                "learning_objectives": ["Memahami konsep pecahan"],
+                "page_count": null,
+                "difficulty_level": null,
+                "include_activities": null,
+                "slide_count": null,
+                "question_count": null,
+                "meeting_duration": null,
+                "teaching_method": null,
+                "assessment_method": null,
+                "visual_density": null,
+                "speaker_notes": null,
+                "question_type": null
+            },
+            "missing_fields": [
+                {
+                    "field_id": "output_type",
+                    "field_label": "Format File",
+                    "priority": "required",
+                    "question": "Format file apa yang Anda inginkan?",
+                    "suggestions": [{"value": "pdf", "label": "PDF"}],
+                    "input_type": "select"
+                }
+            ],
+            "plan_mode": {
+                "active": true,
+                "reason": "Output type not specified",
+                "detected_content_type": "materi_pembelajaran",
+                "content_type_confidence": 0.8
+            }
+        }"#;
+        let result = decode_and_validate(json);
+        assert!(result.is_ok(), "decode failed: {:?}", result.err());
+        let payload = result.unwrap();
+        assert!(payload.plan_mode.active);
+        assert_eq!(payload.plan_mode.detected_content_type.as_deref(), Some("materi_pembelajaran"));
+        let ifields = payload.interpreted_fields.unwrap();
+        assert_eq!(ifields.target_audience.as_deref(), Some("SD Kelas 5"));
+        assert_eq!(ifields.topic.as_deref(), Some("pecahan"));
+        assert_eq!(payload.missing_fields.len(), 1);
+        assert_eq!(payload.missing_fields[0].field_id, "output_type");
+    }
+
+    #[test]
+    fn test_fallback_has_plan_mode() {
+        let p = fallback("Buatkan materi");
+        assert!(!p.plan_mode.active);
+        assert!(p.missing_fields.is_empty());
+    }
+
+    #[test]
+    fn test_repair_missing_plan_mode() {
+        // JSON without plan_mode should get it auto-generated
+        let json = r#"{
+            "schema_version": "media_prompt_understanding.v1",
+            "teacher_prompt": "Buatkan materi",
+            "language": "id",
+            "teacher_intent": {"type": "generate_learning_media", "goal": "test", "preferred_delivery_mode": "digital_download", "requires_clarification": false},
+            "output_type_candidates": [{"type": "pdf", "score": 0.8, "reason": "test"}],
+            "resolved_output_type_reasoning": "test",
+            "document_blueprint": {"title": "test", "summary": "test", "sections": [{"title": "s", "purpose": "p", "bullets": ["b"], "estimated_length": "medium"}]},
+            "constraints": {"preferred_output_type": "auto"},
+            "confidence": {"score": 0.3, "label": "low"},
+            "teacher_delivery_summary": "test"
+        }"#;
+        let result = decode_and_validate(json);
+        assert!(result.is_ok(), "repair should inject plan_mode: {:?}", result.err());
+        let payload = result.unwrap();
+        assert!(payload.plan_mode.active, "low confidence should trigger plan mode via repair");
+    }
+
+    #[test]
+    fn test_repair_missing_interpreted_fields() {
+        // JSON without interpreted_fields should get them auto-populated
+        let json = r#"{
+            "schema_version": "media_prompt_understanding.v1",
+            "teacher_prompt": "Buatkan materi",
+            "language": "id",
+            "teacher_intent": {"type": "generate_learning_media", "goal": "test", "preferred_delivery_mode": "digital_download", "requires_clarification": false},
+            "output_type_candidates": [{"type": "pdf", "score": 0.8, "reason": "test"}],
+            "resolved_output_type_reasoning": "test",
+            "document_blueprint": {"title": "test", "summary": "test", "sections": [{"title": "s", "purpose": "p", "bullets": ["b"], "estimated_length": "medium"}]},
+            "constraints": {"preferred_output_type": "auto"},
+            "confidence": {"score": 0.8, "label": "high"},
+            "teacher_delivery_summary": "test"
+        }"#;
+        let result = decode_and_validate(json);
+        assert!(result.is_ok(), "repair should inject interpreted_fields: {:?}", result.err());
+        let payload = result.unwrap();
+        assert!(payload.interpreted_fields.is_some());
     }
 }

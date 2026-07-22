@@ -591,6 +591,352 @@ fn visual_density_suggestions() -> Vec<SuggestionChip> {
     ]
 }
 
+// ─── Minimum Requirements JSON Schema ───────────────────────────────────
+
+/// A single field in the minimum requirements schema.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MinimumRequirementField {
+    pub field_id: String,
+    pub field_label: String,
+    pub priority: String,
+    pub input_type: String,
+    pub description: String,
+    pub suggestions: Vec<SuggestionChip>,
+}
+
+/// Minimum requirements for a content type.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MinimumRequirements {
+    pub content_type: String,
+    pub content_type_label: String,
+    pub required_fields: Vec<MinimumRequirementField>,
+    pub recommended_fields: Vec<MinimumRequirementField>,
+}
+
+/// Get minimum requirements as JSON for a given content type.
+///
+/// This is used by the LLM prompt and by Rust-side validation to compare
+/// interpreted fields against what's actually needed.
+pub fn get_minimum_requirements_json(content_type: &ContentType) -> serde_json::Value {
+    let reqs = get_minimum_requirements(content_type);
+    serde_json::to_value(&reqs).unwrap_or(serde_json::json!({}))
+}
+
+/// Get minimum requirements struct for a given content type.
+pub fn get_minimum_requirements(content_type: &ContentType) -> MinimumRequirements {
+    match content_type {
+        ContentType::MateriPembelajaran => MinimumRequirements {
+            content_type: "materi_pembelajaran".to_string(),
+            content_type_label: "Materi Pembelajaran".to_string(),
+            required_fields: vec![
+                MinimumRequirementField {
+                    field_id: "target_audience".to_string(),
+                    field_label: "Jenjang/Kelas".to_string(),
+                    priority: "required".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Jenjang dan kelas siswa yang dituju (misal: SD Kelas 5, SMP Kelas 7)".to_string(),
+                    suggestions: grade_level_suggestions(),
+                },
+                MinimumRequirementField {
+                    field_id: "output_type".to_string(),
+                    field_label: "Format File".to_string(),
+                    priority: "required".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Format file output: PDF untuk cetak, DOCX untuk diedit, PPTX untuk presentasi".to_string(),
+                    suggestions: output_type_suggestions(),
+                },
+            ],
+            recommended_fields: vec![
+                MinimumRequirementField {
+                    field_id: "learning_objectives".to_string(),
+                    field_label: "Tujuan Pembelajaran".to_string(),
+                    priority: "recommended".to_string(),
+                    input_type: "text_input".to_string(),
+                    description: "Apa yang harus dipahami/dikuasai siswa setelah mempelajari materi ini".to_string(),
+                    suggestions: vec![],
+                },
+                MinimumRequirementField {
+                    field_id: "page_count".to_string(),
+                    field_label: "Jumlah Halaman".to_string(),
+                    priority: "recommended".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Panjangnya materi: singkat (2-3 hal), sedang (5-7 hal), atau lengkap (10+ hal)".to_string(),
+                    suggestions: page_count_suggestions(),
+                },
+                MinimumRequirementField {
+                    field_id: "include_activities".to_string(),
+                    field_label: "Sertakan Latihan?".to_string(),
+                    priority: "recommended".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Apakah perlu disertakan latihan/soal di akhir materi".to_string(),
+                    suggestions: vec![
+                        SuggestionChip { value: "yes".to_string(), label: "Ya, sertakan latihan".to_string() },
+                        SuggestionChip { value: "no".to_string(), label: "Tidak, materi saja".to_string() },
+                    ],
+                },
+            ],
+        },
+        ContentType::SlidePresentasi => MinimumRequirements {
+            content_type: "slide_presentasi".to_string(),
+            content_type_label: "Slide Presentasi".to_string(),
+            required_fields: vec![
+                MinimumRequirementField {
+                    field_id: "target_audience".to_string(),
+                    field_label: "Jenjang/Kelas".to_string(),
+                    priority: "required".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Jenjang dan kelas siswa yang dituju".to_string(),
+                    suggestions: grade_level_suggestions(),
+                },
+                MinimumRequirementField {
+                    field_id: "output_type".to_string(),
+                    field_label: "Format File".to_string(),
+                    priority: "required".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Format output: PPTX untuk presentasi".to_string(),
+                    suggestions: vec![
+                        SuggestionChip { value: "pptx".to_string(), label: "PowerPoint (Presentasi)".to_string() },
+                    ],
+                },
+            ],
+            recommended_fields: vec![
+                MinimumRequirementField {
+                    field_id: "slide_count".to_string(),
+                    field_label: "Jumlah Slide".to_string(),
+                    priority: "recommended".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Jumlah slide: singkat (8-10), sedang (15-20), atau lengkap (25+)".to_string(),
+                    suggestions: slide_count_suggestions(),
+                },
+                MinimumRequirementField {
+                    field_id: "visual_density".to_string(),
+                    field_label: "Tampilan Slide".to_string(),
+                    priority: "recommended".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Gaya tampilan: banyak visual, seimbang, atau fokus teks".to_string(),
+                    suggestions: visual_density_suggestions(),
+                },
+                MinimumRequirementField {
+                    field_id: "speaker_notes".to_string(),
+                    field_label: "Catatan Presenter".to_string(),
+                    priority: "recommended".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Apakah perlu disertakan catatan untuk presenter".to_string(),
+                    suggestions: vec![
+                        SuggestionChip { value: "yes".to_string(), label: "Ya, sertakan catatan".to_string() },
+                        SuggestionChip { value: "no".to_string(), label: "Tidak".to_string() },
+                    ],
+                },
+            ],
+        },
+        ContentType::Rpp => MinimumRequirements {
+            content_type: "rpp".to_string(),
+            content_type_label: "RPP (Rencana Pelaksanaan Pembelajaran)".to_string(),
+            required_fields: vec![
+                MinimumRequirementField {
+                    field_id: "target_audience".to_string(),
+                    field_label: "Jenjang/Kelas".to_string(),
+                    priority: "required".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Jenjang dan kelas siswa yang dituju".to_string(),
+                    suggestions: grade_level_suggestions(),
+                },
+                MinimumRequirementField {
+                    field_id: "learning_objectives".to_string(),
+                    field_label: "Tujuan Pembelajaran".to_string(),
+                    priority: "required".to_string(),
+                    input_type: "text_input".to_string(),
+                    description: "Tujuan pembelajaran yang ingin dicapai".to_string(),
+                    suggestions: vec![],
+                },
+            ],
+            recommended_fields: vec![
+                MinimumRequirementField {
+                    field_id: "meeting_duration".to_string(),
+                    field_label: "Durasi Pertemuan".to_string(),
+                    priority: "recommended".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Lama durasi pertemuan pembelajaran".to_string(),
+                    suggestions: meeting_duration_suggestions(),
+                },
+                MinimumRequirementField {
+                    field_id: "teaching_method".to_string(),
+                    field_label: "Metode Pembelajaran".to_string(),
+                    priority: "recommended".to_string(),
+                    input_type: "multi_select".to_string(),
+                    description: "Metode yang digunakan: ceramah, diskusi, praktik, dll".to_string(),
+                    suggestions: teaching_method_suggestions(),
+                },
+                MinimumRequirementField {
+                    field_id: "assessment_method".to_string(),
+                    field_label: "Cara Penilaian".to_string(),
+                    priority: "recommended".to_string(),
+                    input_type: "multi_select".to_string(),
+                    description: "Cara menilai pemahaman siswa".to_string(),
+                    suggestions: assessment_method_suggestions(),
+                },
+            ],
+        },
+        ContentType::LembarKerja => MinimumRequirements {
+            content_type: "lembar_kerja".to_string(),
+            content_type_label: "Lembar Kerja".to_string(),
+            required_fields: vec![
+                MinimumRequirementField {
+                    field_id: "target_audience".to_string(),
+                    field_label: "Jenjang/Kelas".to_string(),
+                    priority: "required".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Jenjang dan kelas siswa yang dituju".to_string(),
+                    suggestions: grade_level_suggestions(),
+                },
+                MinimumRequirementField {
+                    field_id: "difficulty_level".to_string(),
+                    field_label: "Tingkat Kesulitan".to_string(),
+                    priority: "required".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Tingkat kesulitan soal: mudah, sedang, sulit, atau campuran".to_string(),
+                    suggestions: difficulty_level_suggestions(),
+                },
+            ],
+            recommended_fields: vec![
+                MinimumRequirementField {
+                    field_id: "page_count".to_string(),
+                    field_label: "Jumlah Halaman".to_string(),
+                    priority: "recommended".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Panjangnya lembar kerja".to_string(),
+                    suggestions: page_count_suggestions(),
+                },
+                MinimumRequirementField {
+                    field_id: "question_count".to_string(),
+                    field_label: "Jumlah Soal".to_string(),
+                    priority: "recommended".to_string(),
+                    input_type: "number_input".to_string(),
+                    description: "Jumlah soal yang diinginkan".to_string(),
+                    suggestions: vec![],
+                },
+                MinimumRequirementField {
+                    field_id: "output_type".to_string(),
+                    field_label: "Format File".to_string(),
+                    priority: "recommended".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Format file output".to_string(),
+                    suggestions: output_type_suggestions(),
+                },
+            ],
+        },
+        ContentType::Silabus => MinimumRequirements {
+            content_type: "silabus".to_string(),
+            content_type_label: "Silabus".to_string(),
+            required_fields: vec![
+                MinimumRequirementField {
+                    field_id: "target_audience".to_string(),
+                    field_label: "Jenjang/Kelas".to_string(),
+                    priority: "required".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Jenjang dan kelas siswa yang dituju".to_string(),
+                    suggestions: grade_level_suggestions(),
+                },
+            ],
+            recommended_fields: vec![
+                MinimumRequirementField {
+                    field_id: "learning_objectives".to_string(),
+                    field_label: "Tujuan Pembelajaran".to_string(),
+                    priority: "recommended".to_string(),
+                    input_type: "text_input".to_string(),
+                    description: "Tujuan pembelajaran yang ingin dicapai".to_string(),
+                    suggestions: vec![],
+                },
+                MinimumRequirementField {
+                    field_id: "output_type".to_string(),
+                    field_label: "Format File".to_string(),
+                    priority: "recommended".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Format file output".to_string(),
+                    suggestions: output_type_suggestions(),
+                },
+            ],
+        },
+        ContentType::Penilaian => MinimumRequirements {
+            content_type: "penilaian".to_string(),
+            content_type_label: "Penilaian".to_string(),
+            required_fields: vec![
+                MinimumRequirementField {
+                    field_id: "target_audience".to_string(),
+                    field_label: "Jenjang/Kelas".to_string(),
+                    priority: "required".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Jenjang dan kelas siswa yang dituju".to_string(),
+                    suggestions: grade_level_suggestions(),
+                },
+                MinimumRequirementField {
+                    field_id: "difficulty_level".to_string(),
+                    field_label: "Tingkat Kesulitan".to_string(),
+                    priority: "required".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Tingkat kesulitan soal".to_string(),
+                    suggestions: difficulty_level_suggestions(),
+                },
+                MinimumRequirementField {
+                    field_id: "question_count".to_string(),
+                    field_label: "Jumlah Soal".to_string(),
+                    priority: "required".to_string(),
+                    input_type: "number_input".to_string(),
+                    description: "Jumlah soal yang diinginkan".to_string(),
+                    suggestions: vec![],
+                },
+            ],
+            recommended_fields: vec![
+                MinimumRequirementField {
+                    field_id: "question_type".to_string(),
+                    field_label: "Jenis Soal".to_string(),
+                    priority: "recommended".to_string(),
+                    input_type: "multi_select".to_string(),
+                    description: "Jenis soal: pilihan ganda, essay, uraian, dll".to_string(),
+                    suggestions: vec![
+                        SuggestionChip { value: "pilihan_ganda".to_string(), label: "Pilihan Ganda".to_string() },
+                        SuggestionChip { value: "essay".to_string(), label: "Essay".to_string() },
+                        SuggestionChip { value: "uraian".to_string(), label: "Uraian".to_string() },
+                        SuggestionChip { value: "benar_salah".to_string(), label: "Benar/Salah".to_string() },
+                        SuggestionChip { value: "isian_singkat".to_string(), label: "Isian Singkat".to_string() },
+                    ],
+                },
+                MinimumRequirementField {
+                    field_id: "output_type".to_string(),
+                    field_label: "Format File".to_string(),
+                    priority: "recommended".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Format file output".to_string(),
+                    suggestions: output_type_suggestions(),
+                },
+            ],
+        },
+        ContentType::Unknown => MinimumRequirements {
+            content_type: "unknown".to_string(),
+            content_type_label: "Tidak Diketahui".to_string(),
+            required_fields: vec![
+                MinimumRequirementField {
+                    field_id: "target_audience".to_string(),
+                    field_label: "Jenjang/Kelas".to_string(),
+                    priority: "required".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Jenjang dan kelas siswa yang dituju".to_string(),
+                    suggestions: grade_level_suggestions(),
+                },
+                MinimumRequirementField {
+                    field_id: "output_type".to_string(),
+                    field_label: "Format File".to_string(),
+                    priority: "required".to_string(),
+                    input_type: "select".to_string(),
+                    description: "Format file output".to_string(),
+                    suggestions: output_type_suggestions(),
+                },
+            ],
+            recommended_fields: vec![],
+        },
+    }
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
 fn count_signals(text: &str, signals: &[&str]) -> f64 {
@@ -760,5 +1106,70 @@ mod tests {
     fn test_count_signals() {
         assert!(count_signals("hello world", &["hello", "foo"]) > 0.0);
         assert_eq!(count_signals("hello world", &["foo", "bar"]), 0.0);
+    }
+
+    // ── Minimum Requirements tests ──────────────────────────────────────
+
+    #[test]
+    fn test_get_minimum_requirements_materi() {
+        let reqs = get_minimum_requirements(&ContentType::MateriPembelajaran);
+        assert_eq!(reqs.content_type, "materi_pembelajaran");
+        assert_eq!(reqs.required_fields.len(), 2);
+        assert_eq!(reqs.required_fields[0].field_id, "target_audience");
+        assert_eq!(reqs.required_fields[1].field_id, "output_type");
+        assert_eq!(reqs.recommended_fields.len(), 3);
+    }
+
+    #[test]
+    fn test_get_minimum_requirements_slide() {
+        let reqs = get_minimum_requirements(&ContentType::SlidePresentasi);
+        assert_eq!(reqs.content_type, "slide_presentasi");
+        assert_eq!(reqs.required_fields.len(), 2);
+        assert_eq!(reqs.recommended_fields.len(), 3);
+    }
+
+    #[test]
+    fn test_get_minimum_requirements_rpp() {
+        let reqs = get_minimum_requirements(&ContentType::Rpp);
+        assert_eq!(reqs.content_type, "rpp");
+        assert_eq!(reqs.required_fields.len(), 2);
+        assert_eq!(reqs.required_fields[0].field_id, "target_audience");
+        assert_eq!(reqs.required_fields[1].field_id, "learning_objectives");
+        assert_eq!(reqs.recommended_fields.len(), 3);
+    }
+
+    #[test]
+    fn test_get_minimum_requirements_penilaian() {
+        let reqs = get_minimum_requirements(&ContentType::Penilaian);
+        assert_eq!(reqs.content_type, "penilaian");
+        assert_eq!(reqs.required_fields.len(), 3);
+        assert_eq!(reqs.recommended_fields.len(), 2);
+    }
+
+    #[test]
+    fn test_get_minimum_requirements_json_is_valid() {
+        let json = get_minimum_requirements_json(&ContentType::MateriPembelajaran);
+        assert!(json.is_object());
+        assert_eq!(json["content_type"], "materi_pembelajaran");
+        assert!(json["required_fields"].is_array());
+        assert!(json["recommended_fields"].is_array());
+    }
+
+    #[test]
+    fn test_minimum_requirements_serialization() {
+        let reqs = get_minimum_requirements(&ContentType::MateriPembelajaran);
+        let json = serde_json::to_string(&reqs).unwrap();
+        assert!(json.contains("target_audience"));
+        assert!(json.contains("output_type"));
+        assert!(json.contains("materi_pembelajaran"));
+    }
+
+    #[test]
+    fn test_grade_level_suggestions_in_requirements() {
+        let reqs = get_minimum_requirements(&ContentType::MateriPembelajaran);
+        let ta_field = &reqs.required_fields[0];
+        assert_eq!(ta_field.field_id, "target_audience");
+        assert!(!ta_field.suggestions.is_empty());
+        assert_eq!(ta_field.suggestions.len(), 12); // SD 1-6, SMP 7-9, SMA 10-12
     }
 }
