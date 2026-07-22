@@ -258,7 +258,7 @@ impl WorkflowService {
                 .decision_service
                 .resolve(
                     generation_id,
-                    interpretation_payload,
+                    interpretation_payload.clone(),
                     None,
                     None,
                 )
@@ -266,13 +266,18 @@ impl WorkflowService {
 
             // Run draft — the second LLM call, using the interpretation +
             // decision context that was persisted above.
-            //
-            // interpret + draft are the two parallel LLM calls described
-            // in the migration plan. While draft depends on interpret's
-            // output (it needs the resolved_output_type and spec), the
-            // two calls are modelled as separate async step traits so
-            // that in the future independent paths could be joined.
-            let _draft_payload = draft.draft(generation_id).await?;
+            let draft_payload = draft.draft(generation_id).await?;
+
+            // Ensure decision_service updates generation_spec_payload with the drafted content sections!
+            let _resolved = self
+                .decision_service
+                .resolve(
+                    generation_id,
+                    interpretation_payload,
+                    None,
+                    Some(draft_payload),
+                )
+                .await?;
         }
 
         // ── Phase C: Transition to CLASSIFIED ────────────────────────────

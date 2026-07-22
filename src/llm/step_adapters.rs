@@ -209,7 +209,7 @@ impl DraftStep for DraftStepAdapter {
 
         // ── 2. Deserialize InterpretationPayload ──────────────────────────
         let interpretation: crate::contracts::prompt_interpretation::InterpretationPayload =
-            serde_json::from_value(interpretation_value).map_err(|e| WorkflowError::StepFailed {
+            serde_json::from_value(interpretation_value.clone()).map_err(|e| WorkflowError::StepFailed {
                 step: "draft",
                 message: format!("failed to deserialize interpretation_payload: {}", e),
                 source: None,
@@ -219,7 +219,7 @@ impl DraftStep for DraftStepAdapter {
         let input = DraftInput {
             generation_id: generation_id.to_string(),
             interpretation,
-            resolved_output_type,
+            resolved_output_type: resolved_output_type.clone(),
             taxonomy_hint: None,
             model: None,
             instruction: None,
@@ -248,7 +248,7 @@ impl DraftStep for DraftStepAdapter {
                 }
             })?;
 
-        // ── 4. Persist draft_payload ─────────────────────────────────────
+        // ── 4. Persist draft_payload & update generation_spec_payload ────────
         let draft_value = serde_json::to_value(&result.draft_payload)
             .map_err(|e| WorkflowError::StepProvider(format!("serialize draft: {}", e)))?;
 
@@ -259,19 +259,21 @@ impl DraftStep for DraftStepAdapter {
             "adapter_metadata": result.adapter_metadata,
         });
 
-        sqlx::query(
-            r#"
-            UPDATE media_generations
-            SET generation_spec_payload = COALESCE(generation_spec_payload::jsonb, $1::jsonb),
-                updated_at = NOW()
-            WHERE id = $2
-            "#,
-        )
-        .bind(&draft_envelope)
-        .bind(gen_uuid)
-        .execute(&self.pool)
-        .await
-        .map_err(WorkflowError::Database)?;
+        // Re-resolve decision so generation_spec_payload is updated with the drafted sections!
+        let decision_service = crate::orchestrator::decision::DecisionService::new(self.pool.clone());
+        let _ = decision_service
+            .resolve(
+                generation_id,
+                interpretation_value,
+                Some(&resolved_output_type),
+                Some(draft_envelope),
+            )
+            .await
+            .map_err(|e| WorkflowError::StepFailed {
+                step: "draft",
+                message: format!("failed to resolve decision with draft payload: {}", e),
+                source: None,
+            })?;
 
         tracing::info!(
             generation_id = %generation_id,

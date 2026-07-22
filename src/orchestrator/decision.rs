@@ -741,10 +741,10 @@ fn build_generation_spec(
 
     // ── Build sections ────────────────────────────────────────────────────
     let sections: Vec<Value> = if let Some(draft) = draft_payload {
-        // Use draft content sections
-        if let Some(payload) = draft.get("payload") {
-            if let Some(draft_sections) = payload.get("sections").and_then(|s| s.as_array()) {
-                let built: Vec<Value> = draft_sections
+        // Use draft content sections (support both envelope { "payload": ... } and direct { "sections": ... })
+        let payload_obj = draft.get("payload").unwrap_or(draft);
+        if let Some(draft_sections) = payload_obj.get("sections").and_then(|s| s.as_array()) {
+            let built: Vec<Value> = draft_sections
                     .iter()
                     .map(|s| {
                         let s_title = s.get("title")
@@ -811,9 +811,6 @@ fn build_generation_spec(
             } else {
                 vec![default_section(teacher_prompt)]
             }
-        } else {
-            vec![default_section(teacher_prompt)]
-        }
     } else {
         // Build sections from interpretation blueprint
         interpretation
