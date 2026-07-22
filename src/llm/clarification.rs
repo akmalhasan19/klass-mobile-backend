@@ -642,17 +642,32 @@ fn build_suggested_prompt(
     output_type: Option<&str>,
     _content_type: &ContentType,
 ) -> String {
-    let mut parts = vec![raw_prompt.trim().to_string()];
+    let raw = raw_prompt.trim();
+    let mut result = raw.to_string();
+
+    let lower = raw.to_lowercase();
 
     if let Some(audience) = audience {
-        parts.push(format!("untuk {}", audience));
+        let audience_lower = audience.replace('_', " ").to_lowercase();
+        let audience_mentioned = audience_lower.split_whitespace().all(|t| lower.contains(t));
+        if !audience_mentioned {
+            result.push_str(&format!(" untuk {}", audience));
+        }
     }
 
     if let Some(output) = output_type {
-        parts.push(format!("format {}", output.to_uppercase()));
+        let format_mention: &[&str] = match output.to_lowercase().as_str() {
+            "pptx" => &["ppt", "pptx", "powerpoint", "slide", "presentasi", "slideshow"],
+            "pdf" => &["pdf"],
+            "docx" => &["docx", "doc", "word", "dokumen"],
+            _ => &[],
+        };
+        let format_mentioned = format_mention.iter().any(|&s| lower.contains(s));
+        if !format_mentioned {
+            result.push_str(&format!(" dalam format {}", output.to_uppercase()));
+        }
     }
 
-    let result = parts.join(", ");
     // Capitalize first letter and ensure proper punctuation
     let mut chars = result.chars();
     match chars.next() {
