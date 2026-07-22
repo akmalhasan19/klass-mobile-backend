@@ -59,13 +59,16 @@ pub struct BodyBlock {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ContentSection {
     #[garde(length(min = 1, max = 200))]
+    #[serde(deserialize_with = "deserialize_string_lenient")]
     pub title: String,
     #[garde(length(min = 1, max = 500))]
+    #[serde(deserialize_with = "deserialize_string_lenient")]
     pub purpose: String,
     #[garde(dive)]
     #[garde(length(min = 1))]
     pub body_blocks: Vec<BodyBlock>,
     #[garde(skip)]
+    #[serde(deserialize_with = "deserialize_string_lenient")]
     pub emphasis: String,
 }
 
@@ -97,10 +100,13 @@ impl Default for DraftFallback {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ContentDraftPayload {
     #[garde(length(min = 1))]
+    #[serde(deserialize_with = "deserialize_string_lenient")]
     pub schema_version: String,
     #[garde(length(min = 1, max = 200))]
+    #[serde(deserialize_with = "deserialize_string_lenient")]
     pub title: String,
     #[garde(length(min = 1, max = 1000))]
+    #[serde(deserialize_with = "deserialize_string_lenient")]
     pub summary: String,
     #[garde(skip)]
     #[serde(default)]
@@ -109,6 +115,7 @@ pub struct ContentDraftPayload {
     #[garde(length(min = 1))]
     pub sections: Vec<ContentSection>,
     #[garde(length(min = 1, max = 1000))]
+    #[serde(deserialize_with = "deserialize_string_lenient")]
     pub teacher_delivery_summary: String,
     #[garde(skip)]
     #[serde(default)]
@@ -278,6 +285,21 @@ fn repair_draft_json(raw: &str) -> String {
     // ── 6. Fix learning_objectives ─────────────────────────────────────
     if !obj.contains_key("learning_objectives") || obj["learning_objectives"].is_null() {
         obj.insert("learning_objectives".to_string(), serde_json::json!([]));
+    } else if let Some(arr) = obj.get("learning_objectives").and_then(|v| v.as_array()).cloned() {
+        // LLM may return [{"objective": "..."}, ...] instead of ["...", "..."]
+        let fixed: Vec<serde_json::Value> = arr.iter().map(|item| match item {
+            serde_json::Value::String(_) => item.clone(),
+            serde_json::Value::Object(m) => {
+                if let Some(s) = m.get("objective").or_else(|| m.get("text")).or_else(|| m.get("content")).or_else(|| m.get("description")).or_else(|| m.get("title")).and_then(|v| v.as_str()) {
+                    serde_json::Value::String(s.to_string())
+                } else {
+                    serde_json::Value::String(serde_json::to_string(item).unwrap_or_default())
+                }
+            }
+            serde_json::Value::Number(n) => serde_json::Value::String(n.to_string()),
+            _ => serde_json::Value::String(item.to_string()),
+        }).collect();
+        obj.insert("learning_objectives".to_string(), serde_json::json!(fixed));
     }
 
     serde_json::to_string(&serde_json::Value::Object(obj)).unwrap_or_else(|_| raw.to_string())
@@ -311,9 +333,35 @@ fn repair_draft_section(s: &serde_json::Value) -> serde_json::Value {
                     let btype = block.get("type")
                         .and_then(|v| v.as_str())
                         .unwrap_or("paragraph");
-                    let content = block.get("content")
-                        .and_then(|v| v.as_str())
-                        .filter(|s| !s.is_empty())?;
+                    // Extract content — handle string, map, array, or other types
+                    let content = match block.get("content") {
+                        Some(serde_json::Value::String(s)) => {
+                            if s.is_empty() { None } else { Some(s.clone()) }
+                        }
+                        Some(serde_json::Value::Object(m)) => {
+                            // LLM may return {"text": "...", "items": [...]} or similar
+                            if let Some(s) = m.get("text").or_else(|| m.get("content")).or_else(|| m.get("value")).or_else(|| m.get("description")).and_then(|v| v.as_str()) {
+                                Some(s.to_string())
+                            } else if let Some(items) = m.get("items").and_then(|v| v.as_array()) {
+                                let joined: String = items.iter().filter_map(|it| it.as_str()).collect::<Vec<_>>().join("\n- ");
+                                if joined.is_empty() { None } else { Some(format!("- {}", joined)) }
+                            } else {
+                                // Serialize the whole map as a string fallback
+                                let s = serde_json::to_string(&serde_json::Value::Object(m.clone())).unwrap_or_default();
+                                if s.is_empty() || s == "{}" { None } else { Some(s) }
+                            }
+                        }
+                        Some(serde_json::Value::Array(arr)) => {
+                            let joined: String = arr.iter().filter_map(|v| match v {
+                                serde_json::Value::String(s) => Some(s.clone()),
+                                _ => v.as_str().map(|s| s.to_string()),
+                            }).collect::<Vec<_>>().join("\n- ");
+                            if joined.is_empty() { None } else { Some(format!("- {}", joined)) }
+                        }
+                        Some(serde_json::Value::Number(n)) => Some(n.to_string()),
+                        _ => None,
+                    };
+                    let content = content?;
                     Some(serde_json::json!({
                         "type": normalize_body_block_type(btype),
                         "content": content,
