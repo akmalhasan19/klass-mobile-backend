@@ -251,6 +251,16 @@ impl WorkflowService {
             // Run interpret — this is the first LLM call.
             let interpretation_payload = interpret.interpret(generation_id).await?;
 
+            // Load preferred_output_type from DB to respect teacher override
+            let preferred_output_type: Option<String> = sqlx::query_scalar(
+                r#"SELECT preferred_output_type FROM media_generations WHERE id = $1"#,
+            )
+            .bind(parse_uuid(generation_id)?)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(WorkflowError::Database)?
+            .flatten();
+
             // Resolve the output type using the interpretation result.
             // DecisionService reads the payload from the DB (persisted by
             // the interpret callback).
@@ -259,7 +269,7 @@ impl WorkflowService {
                 .resolve(
                     generation_id,
                     interpretation_payload.clone(),
-                    None,
+                    preferred_output_type.as_deref(),
                     None,
                 )
                 .await?;
@@ -274,7 +284,7 @@ impl WorkflowService {
                 .resolve(
                     generation_id,
                     interpretation_payload,
-                    None,
+                    preferred_output_type.as_deref(),
                     Some(draft_payload),
                 )
                 .await?;
