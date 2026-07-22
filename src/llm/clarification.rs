@@ -370,6 +370,28 @@ impl ClarificationService {
             }
         }
 
+        // Append slide-by-slide contents if answered
+        let mut slide_contents = Vec::new();
+        for i in 1..=20 {
+            let key = format!("slide_{}", i);
+            if let Some(content) = answers.get(&key) {
+                if !content.trim().is_empty() {
+                    slide_contents.push(format!("Slide {}: {}", i, content));
+                }
+            } else {
+                let key_content = format!("slide_{}_content", i);
+                if let Some(content) = answers.get(&key_content) {
+                    if !content.trim().is_empty() {
+                        slide_contents.push(format!("Slide {}: {}", i, content));
+                    }
+                }
+            }
+        }
+
+        if !slide_contents.is_empty() {
+            parts.push(format!("Rincian isi per slide:\n{}", slide_contents.join("\n")));
+        }
+
         // Join with ", " for natural language flow
         let enriched = parts.join(", ");
         // Clean up double commas or trailing punctuation issues
@@ -575,7 +597,7 @@ fn build_suggested_prompt(
 }
 
 /// Extract a topic hint from the prompt.
-fn extract_topic(prompt: &str) -> Option<String> {
+pub fn extract_topic(prompt: &str) -> Option<String> {
     let lower = prompt.to_lowercase();
 
     // Common patterns: "tentang X", "about X", "materi X"

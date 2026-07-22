@@ -17,9 +17,14 @@ use crate::db::repositories::media_generations::{
     UpdateGenerationJobStatusPayload,
 };
 use crate::error::{AppError, AppResult};
-use crate::llm::clarification::{PreflightInput, ClarificationService};
+use crate::llm::clarification::{extract_topic, PreflightInput, ClarificationService};
 use crate::orchestrator::submission::{CreateInput, ProviderMetadata, SubmissionService};
 use crate::state::AppState;
+use crate::providers::openrouter::{OpenRouterConfig, OpenRouterProviderClient};
+use crate::providers::{ChatMessage, CompletionRequest, Provider};
+use crate::standards::content_standards::{
+    detect_page_count, detect_slide_count,
+};
 
 use super::response;
 
@@ -165,7 +170,7 @@ pub async fn preflight(
 
     // Run preflight analysis
     let input = PreflightInput {
-        raw_prompt: payload.raw_prompt,
+        raw_prompt: payload.raw_prompt.clone(),
         preferred_output_type: payload.preferred_output_type,
         subject_id: payload.subject_id,
         sub_subject_id: payload.sub_subject_id,
@@ -188,7 +193,7 @@ pub async fn preflight(
         detected.subject = resolve_subject_name(&state, subject_id).await;
     }
 
-    let response_data = PreflightResponseData {
+    let mut response_data = PreflightResponseData {
         generation_id: clarification_response.generation_id,
         detected,
         gaps: clarification_response
@@ -215,6 +220,128 @@ pub async fn preflight(
         total_required_gaps: clarification_response.total_required_gaps,
         total_recommended_gaps: clarification_response.total_recommended_gaps,
     };
+
+    // If the request format is PPTX/slides, ask slide-by-slide recommended questions
+    let is_pptx = response_data.detected.output_type.as_deref() == Some("pptx");
+    if is_pptx {
+        let raw_prompt = &payload.raw_prompt;
+        // Parse slide count from prompt, defaulting to 5
+        let slide_count = detect_slide_count(raw_prompt)
+            .or_else(|| detect_page_count(raw_prompt))
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(5);
+
+        let topic = extract_topic(raw_prompt)
+            .unwrap_or_else(|| raw_prompt.clone());
+
+        // We call OpenRouter client to get slide-by-slide suggestions
+        let or_config = OpenRouterConfig::from_app_config(&state.config);
+        let openrouter_client = OpenRouterProviderClient::new(state.http.clone(), or_config);
+        
+        let system_instruction = "You are a curriculum design assistant. Given a learning topic, target audience, and slide count, generate a list of slide-by-slide suggestions for a presentation. Return a JSON object with a list of slides, each containing a title (e.g. 'Slide 1: ...') and exactly 3 short suggestion chips (in Indonesian, max 5 words each) for what the content of that slide could be.";
+        let user_prompt = format!(
+            "Topic: {}\nGrade/Audience: {}\nSlide Count: {}\nReturn a JSON object in this exact format:\n{{\n  \"slides\": [\n    {{\n      \"slide_index\": 1,\n      \"slide_title\": \"Slide 1: Pembuka\",\n      \"suggestions\": [\n        {{\"value\": \"value1\", \"label\": \"label1\"}},\n        {{\"value\": \"value2\", \"label\": \"label2\"}},\n        {{\"value\": \"value3\", \"label\": \"label3\"}}\n      ]\n    }}\n  ]\n}}",
+            topic,
+            response_data.detected.audience.as_deref().unwrap_or("Umum"),
+            slide_count
+        );
+
+        // Prepare request
+        let messages = vec![
+            ChatMessage { role: "system".to_string(), content: system_instruction.to_string() },
+            ChatMessage { role: "user".to_string(), content: user_prompt },
+        ];
+        let req = CompletionRequest::new(&state.config.openrouter_model, messages).with_json_mode();
+
+        // Call the LLM
+        let mut llm_suggestions = Vec::new();
+        if !state.config.openrouter_api_key.is_empty() {
+            match openrouter_client.complete(req).await {
+                Ok(resp) => {
+                    if let Some(content) = resp.first_choice_content() {
+                        // Try parsing the json
+                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(content) {
+                            if let Some(slides) = parsed.get("slides").and_then(|s| s.as_array()) {
+                                for slide in slides {
+                                    let index = slide.get("slide_index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                                    let title = slide.get("slide_title").and_then(|v| v.as_str()).unwrap_or("");
+                                    let mut chips = Vec::new();
+                                    if let Some(s_array) = slide.get("suggestions").and_then(|v| v.as_array()) {
+                                        for s_item in s_array {
+                                            let val = s_item.get("value").and_then(|v| v.as_str()).unwrap_or("");
+                                            let lbl = s_item.get("label").and_then(|v| v.as_str()).unwrap_or(val);
+                                            if !val.is_empty() {
+                                                chips.push(SuggestionChipSchema {
+                                                    value: val.to_string(),
+                                                    label: lbl.to_string(),
+                                                });
+                                            }
+                                        }
+                                    }
+                                    if index > 0 && !title.is_empty() && !chips.is_empty() {
+                                        llm_suggestions.push((index, title.to_string(), chips));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "Failed to call OpenRouter for slide suggestions, using rule-based fallback");
+                }
+            }
+        }
+
+        // If LLM call failed or returned empty list or API key is not set (e.g. testing), generate fallback suggestions
+        if llm_suggestions.is_empty() {
+            for i in 1..=slide_count {
+                let (title, chips) = match i {
+                    1 => (format!("Slide 1: Pembuka / Judul ({})", topic), vec![
+                        SuggestionChipSchema { value: format!("Judul: Pembelajaran {}", topic), label: format!("Judul: Pembelajaran {}", topic) },
+                        SuggestionChipSchema { value: format!("Judul: Mengenal {}", topic), label: format!("Judul: Mengenal {}", topic) },
+                        SuggestionChipSchema { value: format!("Judul: Pengantar {}", topic), label: format!("Judul: Pengantar {}", topic) },
+                    ]),
+                    2 => (format!("Slide 2: Pengertian / Konsep ({})", topic), vec![
+                        SuggestionChipSchema { value: format!("Definisi dasar {}", topic), label: format!("Definisi dasar {}", topic) },
+                        SuggestionChipSchema { value: format!("Latar belakang {}", topic), label: format!("Latar belakang {}", topic) },
+                        SuggestionChipSchema { value: format!("Gambaran umum {}", topic), label: format!("Gambaran umum {}", topic) },
+                    ]),
+                    3 => (format!("Slide 3: Materi Inti / Contoh ({})", topic), vec![
+                        SuggestionChipSchema { value: format!("Contoh pertama {}", topic), label: format!("Contoh pertama {}", topic) },
+                        SuggestionChipSchema { value: format!("Struktur dan bagian {}", topic), label: format!("Struktur dan bagian {}", topic) },
+                        SuggestionChipSchema { value: format!("Cara kerja {}", topic), label: format!("Cara kerja {}", topic) },
+                    ]),
+                    4 => (format!("Slide 4: Pembahasan / Aplikasi ({})", topic), vec![
+                        SuggestionChipSchema { value: format!("Penerapan {}", topic), label: format!("Penerapan {}", topic) },
+                        SuggestionChipSchema { value: format!("Latihan bersama {}", topic), label: format!("Latihan bersama {}", topic) },
+                        SuggestionChipSchema { value: format!("Studi kasus {}", topic), label: format!("Studi kasus {}", topic) },
+                    ]),
+                    _ => (format!("Slide {}: Penutup / Evaluasi ({})", i, topic), vec![
+                        SuggestionChipSchema { value: "Ringkasan & Kuis".to_string(), label: "Ringkasan & Kuis".to_string() },
+                        SuggestionChipSchema { value: "Latihan Soal Mandiri".to_string(), label: "Latihan Soal Mandiri".to_string() },
+                        SuggestionChipSchema { value: "Kesimpulan & Penutup".to_string(), label: "Kesimpulan & Penutup".to_string() },
+                    ]),
+                };
+                llm_suggestions.push((i, title, chips));
+            }
+        }
+
+        // Add the slide-level gaps to response_data
+        for (index, title, chips) in llm_suggestions {
+            response_data.gaps.push(ContentGapSchema {
+                field_id: format!("slide_{}", index),
+                question: format!("Apa isi dari {}?", title),
+                priority: "recommended".to_string(),
+                input_type: "text_input".to_string(),
+                suggestions: chips,
+                detected_value: None,
+            });
+            response_data.total_recommended_gaps += 1;
+        }
+
+        // Since we added slide questions, it is not ready
+        response_data.is_ready = false;
+    }
 
     Ok(response::ok(response_data))
 }
