@@ -1012,7 +1012,10 @@ fn build_generation_spec(
         },
         "assets": assets,
         "assessment_or_activity_blocks": assessment_blocks,
-        "teacher_delivery_summary": teacher_delivery_summary
+        "teacher_delivery_summary": teacher_delivery_summary,
+        "contract_versions": {
+            "generator_output_metadata": "media_generator_output_metadata.v1"
+        }
     })
 }
 
@@ -1329,6 +1332,10 @@ mod tests {
         assert_eq!(spec["export_format"], "pdf");
         assert_eq!(spec["layout_hints"]["document_mode"], "document");
         assert_eq!(spec["page_or_slide_structure"]["unit_type"], "page");
+        assert_eq!(
+            spec["contract_versions"]["generator_output_metadata"],
+            "media_generator_output_metadata.v1"
+        );
     }
 
     #[test]
