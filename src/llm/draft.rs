@@ -120,7 +120,12 @@ The JSON must follow this exact schema:
       \"layout_type\": \"title_hero\",
       \"title\": \"Slide Title\",
       \"subtitle\": \"Short explanation subtitle\",
-      \"content\": []
+      \"content\": [
+        {
+          \"heading\": \"Optional heading\",
+          \"body\": \"Body text or bullet point\"
+        }
+      ]
     }
   ],
   \"sections\": [],
