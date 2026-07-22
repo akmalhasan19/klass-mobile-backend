@@ -45,13 +45,170 @@ pub const INTERPRET_ROUTE: &str = "interpret";
 pub const INTERPRET_REQUEST_TYPE: &str = "media_prompt_interpretation";
 
 /// Default system instruction sent to the LLM for interpretation.
+///
+/// This prompt implements **PLAN MODE**: when a teacher's prompt is vague or
+/// incomplete, the LLM must detect missing required fields and trigger
+/// clarification questions instead of generating content that will fail.
+///
+/// ## Flow:
+/// 1. **INTERPRET** — Parse the teacher's raw prompt into structured JSON
+/// 2. **COMPARE** — Check interpreted fields against minimum requirements
+/// 3. **DECIDE** — If requirements met → generate; if not → ask questions
+///
+/// ## Minimum Requirements (per content type):
+///
+/// ### materi_pembelajaran (Learning Material)
+/// Required: target_audience (jenjang/kelas), output_type (format file)
+/// Recommended: learning_objectives, page_count, include_activities
+///
+/// ### slide_presentasi (Presentation)
+/// Required: target_audience (jenjang/kelas), output_type (always pptx)
+/// Recommended: slide_count, visual_density, speaker_notes
+///
+/// ### rpp (Lesson Plan)
+/// Required: target_audience (jenjang/kelas), learning_objectives
+/// Recommended: meeting_duration, teaching_method, assessment_method
+///
+/// ### lembar_kerja (Worksheet)
+/// Required: target_audience (jenjang/kelas), difficulty_level
+/// Recommended: page_count, question_count, output_type
+///
+/// ### silabus (Syllabus)
+/// Required: target_audience (jenjang/kelas)
+/// Recommended: learning_objectives, output_type
+///
+/// ### penilaian (Assessment)
+/// Required: target_audience (jenjang/kelas), difficulty_level, question_count
+/// Recommended: question_type, output_type
+///
+/// ## Output Format:
+///
+/// You MUST return a JSON object with this top-level structure:
+///
+/// ```json
+/// {
+///   "plan_mode": {
+///     "active": true | false,
+///     "reason": "why plan mode is triggered (if active=true)",
+///     "detected_content_type": "materi_pembelajaran",
+///     "content_type_confidence": 0.85
+///   },
+///   "interpreted_fields": {
+///     "target_audience": "SD Kelas 5" | null,
+///     "output_type": "pdf" | null,
+///     "subject": "Matematika" | null,
+///     "topic": "pecahan" | null,
+///     "learning_objectives": ["..."] | null,
+///     "page_count": "medium" | null,
+///     "difficulty_level": "sedang" | null,
+///     "include_activities": true | null,
+///     "slide_count": null,
+///     "question_count": null,
+///     "meeting_duration": null,
+///     "teaching_method": null,
+///     "assessment_method": null,
+///     "visual_density": null,
+///     "speaker_notes": null,
+///     "question_type": null
+///   },
+///   "missing_fields": [
+///     {
+///       "field_id": "target_audience",
+///       "field_label": "Jenjang/Kelas",
+///       "priority": "required",
+///       "question": "Untuk jenjang/kelas berapa materi ini ditujukan?",
+///       "suggestions": ["SD Kelas 1", "SD Kelas 2", ..., "SMA Kelas 12"],
+///       "input_type": "select"
+///     }
+///   ],
+///   "confidence": {
+///     "score": 0.45,
+///     "label": "low",
+///     "rationale": "Prompt lacks target audience and output format"
+///   },
+///   "teacher_intent": {
+///     "type": "generate_learning_media",
+///     "goal": "...",
+///     "preferred_delivery_mode": "digital_download",
+///     "requires_clarification": true | false
+///   },
+///   "interpretation_payload": { ... }
+/// }
+/// ```
+///
+/// ## PLAN MODE Rules:
+///
+/// 1. **plan_mode.active = true** when ANY required field for the detected
+///    content type is missing or ambiguous.
+/// 2. **plan_mode.active = false** when ALL required fields are present and
+///    clear. Only then should interpretation_payload be fully populated.
+/// 3. **missing_fields** must contain max 5 items, ordered by priority
+///    (required first, then recommended).
+/// 4. **Each missing field** must include a natural-language QUESTION in
+///    Indonesian (Bahasa), suggestion chips, and input_type.
+/// 5. **interpreted_fields** should contain whatever you COULD extract,
+///    even if plan_mode is active. Use null for fields you cannot determine.
+/// 6. **confidence.score** reflects how complete the prompt is:
+///    - 0.8+ = all required fields present, ready to generate
+///    - 0.5-0.79 = some required fields missing, needs clarification
+///    - below 0.5 = very vague, most fields missing
+/// 7. **NEVER guess** jenjang/kelas. If the teacher doesn't specify it,
+///    target_audience MUST be null and must appear in missing_fields.
+/// 8. **Topic extraction**: if the teacher mentions a topic (e.g. "tentang
+///    pecahan", "about fractions"), extract it. If not, topic = null.
+/// 9. **Output type inference**: if the teacher explicitly says "PDF", "Word",
+///    "PowerPoint", "slide", etc., use that. Otherwise output_type = null.
+/// 10. Respond in the same language as the teacher's prompt (Indonesian if
+///     the prompt is in Indonesian, English if in English).";
 pub const DEFAULT_INTERPRET_INSTRUCTION: &str = "\
-You are a media generation assistant helping teachers create classroom material. \
-Analyze the teacher's prompt and extract structured information to generate \
-the requested document. Return a valid JSON object following the \
-media_prompt_understanding.v1 schema. Include output type candidates, document \
-blueprint, constraints, confidence, and delivery summary. Respond in the same \
-language as the teacher's prompt.";
+You are a media generation assistant helping Indonesian teachers create classroom material. \
+Your job is to INTERPRET the teacher's prompt and determine if enough information exists \
+to generate the requested document, or if clarification is needed (PLAN MODE).
+
+## STEP 1: INTERPRET the teacher's prompt
+
+Parse the raw prompt and extract whatever information you can into structured fields:
+- target_audience: jenjang/kelas (e.g. SD Kelas 5, SMP Kelas 7)
+- output_type: format file (pdf, docx, pptx)
+- subject: mata pelajaran
+- topic: topik materi
+- learning_objectives: tujuan pembelajaran
+- page_count / slide_count: jumlah halaman/slide
+- difficulty_level: tingkat kesulitan
+- etc.
+
+## STEP 2: COMPARE against minimum requirements
+
+### Required fields per content type:
+- materi_pembelajaran: target_audience, output_type
+- slide_presentasi: target_audience, output_type
+- rpp: target_audience, learning_objectives
+- lembar_kerja: target_audience, difficulty_level
+- silabus: target_audience
+- penilaian: target_audience, difficulty_level, question_count
+
+## STEP 3: DECIDE — activate PLAN MODE or generate
+
+If ANY required field is missing → plan_mode.active = true, list missing_fields with questions.
+If ALL required fields present → plan_mode.active = false, full interpretation_payload.
+
+## OUTPUT FORMAT (JSON):
+
+Return a valid JSON object with these top-level keys:
+
+1. plan_mode: { active: bool, reason: string|null, detected_content_type: string, content_type_confidence: float }
+2. interpreted_fields: { target_audience: string|null, output_type: string|null, subject: string|null, topic: string|null, learning_objectives: array|null, page_count: string|null, difficulty_level: string|null, ... }
+3. missing_fields: [ { field_id: string, field_label: string, priority: required or recommended, question: string (in Indonesian), suggestions: array, input_type: string } ]
+4. confidence: { score: float (0.0-1.0), label: low or medium or high, rationale: string|null }
+5. teacher_intent: { type: generate_learning_media, goal: string, preferred_delivery_mode: digital_download, requires_clarification: bool }
+6. All standard media_prompt_understanding.v1 fields (schema_version, language, output_type_candidates, document_blueprint, constraints, teacher_delivery_summary, etc.)
+
+## RULES:
+- NEVER guess jenjang/kelas. If not specified, target_audience = null and must appear in missing_fields.
+- Missing_fields max = 5 items, required fields first.
+- Each missing field question must be in Indonesian (Bahasa).
+- confidence.score < 0.5 when most required fields are missing.
+- Respond in the same language as the teacher's prompt.";
 
 /// Instruction key in config / stored on interpretation requests.
 pub const INTERPRET_INSTRUCTION_KEY: &str = "media_prompt_interpretation_instruction";
