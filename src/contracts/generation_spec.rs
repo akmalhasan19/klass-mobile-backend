@@ -1,14 +1,7 @@
-//! `MediaGenerationSpecContract` — the spec sent to the Python renderer.
-//!
-//! Contains the resolved output type, interpretation data, taxonomy hints,
-//! and all parameters needed for document generation.
-
 use garde::Validate;
 use serde::{Deserialize, Serialize};
 
 pub const SCHEMA_VERSION: &str = "media_generation_spec.v1";
-
-// ─── Sub-types ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SpecTaxonomyInfo {
