@@ -54,7 +54,40 @@ Given the following interpretation of a teacher's request, generate the actual \
 content for the document. Return a valid JSON object following the \
 media_content_draft.v1 schema. Include sections with body blocks, learning \
 objectives, and a teacher delivery summary. Write in the same language as the \
-interpretation.";
+interpretation.
+
+## CRITICAL: Section Count Rules
+
+The number of sections you generate DIRECTLY determines the number of pages/slides in the final output. \
+Each section becomes exactly one page (PDF) or one slide (PPTX).
+
+- If target_page_count or target_slide_count is provided, generate EXACTLY that many content sections \
+  (NOT counting the title slide, which is always 1 additional slide).
+- Example: target_page_count=5 → generate exactly 5 content sections (total output = 5 pages + 1 title = 6 pages).
+- If no page/slide count is specified, generate 4-6 content sections for adequate coverage.
+- NEVER generate fewer than 3 sections unless the topic is extremely narrow.
+
+## Content Depth per Section
+
+Each section MUST have substantial content:
+- title: Clear, descriptive section title
+- purpose: 1-2 sentence summary of what this section covers
+- body_blocks: At least 3-5 content blocks per section. Use a MIX of:
+  - type \"paragraph\": Explanatory text (2-4 sentences each)
+  - type \"bullet\": Key points, lists, examples (at least 2-3 bullets)
+  - type \"checklist\": Step-by-step procedures or checklists when appropriate
+  - type \"note\": Important callouts, tips, or warnings
+- emphasis: \"high\" for key concepts, \"medium\" for supporting content
+
+## Content Quality Guidelines
+
+- Write accurate, educational content appropriate for the target audience
+- Include concrete examples, analogies, or real-world applications
+- Use clear topic sentences and logical flow within each section
+- Vary content types across sections (don't make every section identical in structure)
+- For scientific topics: include definitions, processes, examples, and significance
+- For historical topics: include timeline, key figures, events, and impact
+- For mathematical topics: include concepts, formulas, worked examples, and practice problems";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -451,6 +484,8 @@ impl DraftService {
             })).collect::<Vec<_>>(),
             "language": input.interpretation.language,
             "teacher_intent_goal": input.interpretation.teacher_intent.goal,
+            "target_page_count": input.interpretation.interpreted_fields.as_ref().and_then(|f| f.page_count.clone()),
+            "target_slide_count": input.interpretation.interpreted_fields.as_ref().and_then(|f| f.slide_count.clone()),
             "constraints": serde_json::json!({
                 "preferred_output_type": input.interpretation.constraints.preferred_output_type,
                 "must_include": input.interpretation.constraints.must_include,

@@ -5,7 +5,45 @@
 use garde::Validate;
 use serde::{Deserialize, Serialize};
 
+use serde::Deserializer;
+
 pub const SCHEMA_VERSION: &str = "media_content_draft.v1";
+
+/// Deserialize a string that may arrive as a String, JSON Object/Map, Array, Number, or Bool.
+pub fn deserialize_string_lenient<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let val = serde_json::Value::deserialize(deserializer)?;
+    match val {
+        serde_json::Value::String(s) => Ok(s),
+        serde_json::Value::Number(n) => Ok(n.to_string()),
+        serde_json::Value::Bool(b) => Ok(b.to_string()),
+        serde_json::Value::Null => Ok(String::new()),
+        serde_json::Value::Object(m) => {
+            if let Some(s) = m.get("text").or_else(|| m.get("content")).or_else(|| m.get("label")).or_else(|| m.get("name")).or_else(|| m.get("value")).and_then(|v| v.as_str()) {
+                Ok(s.to_string())
+            } else if let Some(items) = m.get("items").and_then(|v| v.as_array()) {
+                let strings: Vec<String> = items.iter().filter_map(|it| match it {
+                    serde_json::Value::String(s) => Some(s.clone()),
+                    serde_json::Value::Number(n) => Some(n.to_string()),
+                    _ => None,
+                }).collect();
+                Ok(strings.join("\n- "))
+            } else {
+                Ok(serde_json::to_string(&serde_json::Value::Object(m)).unwrap_or_default())
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            let strings: Vec<String> = arr.iter().filter_map(|v| match v {
+                serde_json::Value::String(s) => Some(s.clone()),
+                serde_json::Value::Number(n) => Some(n.to_string()),
+                _ => None,
+            }).collect();
+            Ok(strings.join("\n- "))
+        }
+    }
+}
 
 // ─── Sub-types ──────────────────────────────────────────────────────────────
 
@@ -14,6 +52,7 @@ pub struct BodyBlock {
     #[garde(skip)]
     pub r#type: String,
     #[garde(length(min = 1, max = 1000))]
+    #[serde(deserialize_with = "deserialize_string_lenient")]
     pub content: String,
 }
 

@@ -694,6 +694,23 @@ fn build_generation_spec(
     };
     let unit_type = if export_format == "pptx" { "slide" } else { "page" };
 
+    // ── Extract target page/slide count from interpretation ────────────────
+    let target_page_count = interpretation
+        .pointer("/interpreted_fields/page_count")
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.parse::<i64>().ok());
+
+    let target_slide_count = interpretation
+        .pointer("/interpreted_fields/slide_count")
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.parse::<i64>().ok());
+
+    let target_units = if export_format == "pptx" {
+        target_slide_count
+    } else {
+        target_page_count
+    };
+
     // ── Extract safe string helpers ───────────────────────────────────────
     let teacher_prompt = interpretation
         .get("teacher_prompt")
@@ -971,10 +988,13 @@ fn build_generation_spec(
         },
         "page_or_slide_structure": {
             "unit_type": unit_type,
-            "total_units": 1 + sections.len() as i64 + if assessment_blocks.is_empty() { 0 } else { 1 },
+            "total_units": target_units.unwrap_or(
+                1 + sections.len() as i64 + if assessment_blocks.is_empty() { 0 } else { 1 }
+            ),
             "opening_unit": true,
             "section_units": sections.len() as i64,
             "closing_unit": !assessment_blocks.is_empty(),
+            "requested_units": target_units,
         },
         "content_context": {
             "subject_context": interpretation.get("subject_context"),

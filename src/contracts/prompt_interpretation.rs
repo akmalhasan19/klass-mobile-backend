@@ -64,6 +64,49 @@ where
     }
 }
 
+/// Deserialize an optional string that may arrive as a string, map/object, array, number, or bool.
+pub fn deserialize_optional_string_lenient<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let val = serde_json::Value::deserialize(deserializer)?;
+    if val.is_null() {
+        return Ok(None);
+    }
+    match val {
+        serde_json::Value::String(s) => {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(trimmed.to_string()))
+            }
+        }
+        serde_json::Value::Number(n) => Ok(Some(n.to_string())),
+        serde_json::Value::Bool(b) => Ok(Some(b.to_string())),
+        serde_json::Value::Object(m) => {
+            if let Some(s) = m.get("text").or_else(|| m.get("content")).or_else(|| m.get("label")).or_else(|| m.get("name")).or_else(|| m.get("subject_name")).or_else(|| m.get("title")).or_else(|| m.get("value")).and_then(|v| v.as_str()) {
+                Ok(Some(s.to_string()))
+            } else {
+                Ok(Some(serde_json::to_string(&serde_json::Value::Object(m)).unwrap_or_default()))
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            let strings: Vec<String> = arr.iter().filter_map(|v| match v {
+                serde_json::Value::String(s) => Some(s.clone()),
+                serde_json::Value::Number(n) => Some(n.to_string()),
+                _ => None,
+            }).collect();
+            if !strings.is_empty() {
+                Ok(Some(strings.join(", ")))
+            } else {
+                Ok(Some(serde_json::to_string(&serde_json::Value::Array(arr)).unwrap_or_default()))
+            }
+        }
+        serde_json::Value::Null => Ok(None),
+    }
+}
+
 // ─── Sub-types ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -300,52 +343,52 @@ where
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct InterpretedFields {
     #[garde(skip)]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_optional_string_lenient")]
     pub target_audience: Option<String>,
     #[garde(skip)]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_optional_string_lenient")]
     pub output_type: Option<String>,
     #[garde(skip)]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_optional_string_lenient")]
     pub subject: Option<String>,
     #[garde(skip)]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_optional_string_lenient")]
     pub topic: Option<String>,
     #[garde(skip)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub learning_objectives: Option<Vec<String>>,
     #[garde(skip)]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_optional_string_lenient")]
     pub page_count: Option<String>,
     #[garde(skip)]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_optional_string_lenient")]
     pub difficulty_level: Option<String>,
     #[garde(skip)]
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_bool_lenient_option")]
     pub include_activities: Option<bool>,
     #[garde(skip)]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_optional_string_lenient")]
     pub slide_count: Option<String>,
     #[garde(skip)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub question_count: Option<i32>,
     #[garde(skip)]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_optional_string_lenient")]
     pub meeting_duration: Option<String>,
     #[garde(skip)]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_optional_string_lenient")]
     pub teaching_method: Option<String>,
     #[garde(skip)]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_optional_string_lenient")]
     pub assessment_method: Option<String>,
     #[garde(skip)]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_optional_string_lenient")]
     pub visual_density: Option<String>,
     #[garde(skip)]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_optional_string_lenient")]
     pub speaker_notes: Option<String>,
     #[garde(skip)]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_optional_string_lenient")]
     pub question_type: Option<String>,
 }
 
