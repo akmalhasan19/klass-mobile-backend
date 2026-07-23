@@ -1,7 +1,8 @@
 -- Seed recommended_projects with 4 PPT placeholder projects
 -- Thumbnail images are hosted in R2 bucket: klass-storage/assets/
+-- FIX: explicitly include created_at/updated_at to avoid NULL
 
-INSERT INTO recommended_projects (title, description, thumbnail_url, ratio, source_type, display_priority, is_active)
+INSERT INTO recommended_projects (title, description, thumbnail_url, ratio, source_type, display_priority, is_active, created_at, updated_at)
 VALUES
     (
         'Presentasi Geologi',
@@ -10,7 +11,9 @@ VALUES
         'ppt',
         'admin_upload',
         100,
-        true
+        true,
+        NOW(),
+        NOW()
     ),
     (
         'Presentasi Biologi',
@@ -19,7 +22,9 @@ VALUES
         'ppt',
         'admin_upload',
         90,
-        true
+        true,
+        NOW(),
+        NOW()
     ),
     (
         'Presentasi Kalkulus',
@@ -28,7 +33,9 @@ VALUES
         'ppt',
         'admin_upload',
         80,
-        true
+        true,
+        NOW(),
+        NOW()
     ),
     (
         'Presentasi Pendidikan Pancasila',
@@ -37,7 +44,9 @@ VALUES
         'ppt',
         'admin_upload',
         70,
-        true
+        true,
+        NOW(),
+        NOW()
     );
 
 -- Ensure homepage section 'project_recommendations' is enabled
