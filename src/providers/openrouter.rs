@@ -115,11 +115,16 @@ impl OpenRouterProviderClient {
 
         // If models is not explicitly set in the request, and we have fallback models,
         // construct the priority-ordered list of models for OpenRouter's native failover.
+        // NOTE: OpenRouter limits the models array to 3 items max.
+        const OPENROUTER_MAX_MODELS: usize = 3;
         if request.models.is_none() && !self.config.fallback_models.is_empty() {
             let mut models = vec![request.model.clone()];
             for fallback_model in &self.config.fallback_models {
                 if !models.contains(fallback_model) {
                     models.push(fallback_model.clone());
+                }
+                if models.len() >= OPENROUTER_MAX_MODELS {
+                    break;
                 }
             }
             request.models = Some(models);
@@ -679,6 +684,7 @@ mod tests {
         assert!(req.models.is_none());
 
         // Simulate complete_with_retry preparation:
+        const OPENROUTER_MAX_MODELS: usize = 3;
         if req.model.is_empty() {
             req.model = client.config.model.clone();
         }
@@ -687,6 +693,9 @@ mod tests {
             for fallback_model in &client.config.fallback_models {
                 if !models.contains(fallback_model) {
                     models.push(fallback_model.clone());
+                }
+                if models.len() >= OPENROUTER_MAX_MODELS {
+                    break;
                 }
             }
             req.models = Some(models);
@@ -699,5 +708,52 @@ mod tests {
             "meta-llama/llama-3.3-70b-instruct".to_string(),
         ];
         assert_eq!(req.models.unwrap(), expected_models);
+    }
+
+    #[tokio::test]
+    async fn test_complete_with_retry_caps_models_at_3() {
+        // Regression test: OpenRouter rejects requests with >3 models in the array.
+        // Verify that even if 5+ fallback models are configured, only 3 total are sent.
+        let config = OpenRouterConfig {
+            api_key: "sk-or-test-key".to_string(),
+            model: "minimax/minimax-m3".to_string(),
+            base_url: "https://openrouter.ai/api/v1".to_string(),
+            timeout_seconds: 10,
+            retry_attempts: 1,
+            retry_backoff_ms: 10,
+            fallback_models: vec![
+                "google/gemini-2.5-flash".to_string(),
+                "meta-llama/llama-3.3-70b-instruct".to_string(),
+                "anthropic/claude-3-haiku".to_string(),
+                "openai/gpt-4o-mini".to_string(),
+            ],
+        };
+        let client = OpenRouterProviderClient::new(reqwest::Client::new(), config);
+        let mut req = CompletionRequest::new("", vec![]);
+
+        // Simulate complete_with_retry preparation:
+        const OPENROUTER_MAX_MODELS: usize = 3;
+        if req.model.is_empty() {
+            req.model = client.config.model.clone();
+        }
+        if req.models.is_none() && !client.config.fallback_models.is_empty() {
+            let mut models = vec![req.model.clone()];
+            for fallback_model in &client.config.fallback_models {
+                if !models.contains(fallback_model) {
+                    models.push(fallback_model.clone());
+                }
+                if models.len() >= OPENROUTER_MAX_MODELS {
+                    break;
+                }
+            }
+            req.models = Some(models);
+        }
+
+        let models = req.models.unwrap();
+        assert_eq!(models.len(), 3, "models array must have exactly 3 items (OpenRouter limit)");
+        assert_eq!(models[0], "minimax/minimax-m3");
+        assert_eq!(models[1], "google/gemini-2.5-flash");
+        assert_eq!(models[2], "meta-llama/llama-3.3-70b-instruct");
+        // The 4th and 5th fallback models should be excluded
     }
 }

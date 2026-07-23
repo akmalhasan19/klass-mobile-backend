@@ -21,6 +21,8 @@ envVarGroups:
         sync: false
       - key: OPENROUTER_BASE_URL
         sync: false
+      - key: OPENROUTER_FALLBACK_MODELS
+        sync: false
       - key: HMAC_SECRET
         sync: false
       - key: MEDIA_GEN_URL

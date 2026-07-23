@@ -137,9 +137,9 @@ impl AppConfig {
             .set_default("rust_log", "info")?
             .set_default("log_format", "json")?
             .set_default("cors_allowed_origins", "")?
-            .set_default("openrouter_model", "minimax/minimax-m3")?
+            .set_default("openrouter_model", "")?
             .set_default("openrouter_base_url", "https://openrouter.ai/api/v1")?
-            .set_default("openrouter_fallback_models", "google/gemini-2.5-flash,meta-llama/llama-3.3-70b-instruct")?
+            .set_default("openrouter_fallback_models", "")?
             .set_default("llm_adapter_fallback_url", "")?
             .set_default("media_gen_webhook_secret", "")?
             .set_default("media_gen_hmac_secret", "")?
@@ -170,6 +170,24 @@ impl AppConfig {
             .build()?;
 
         let cfg: Self = config.try_deserialize()?;
+
+        // ── Startup validation: critical env vars ─────────────────────────
+        if cfg.database_url.is_empty() {
+            anyhow::bail!("DATABASE_URL is required but not set");
+        }
+        if cfg.redis_url.is_empty() {
+            anyhow::bail!("REDIS_URL is required but not set");
+        }
+        if cfg.hmac_secret.is_empty() {
+            anyhow::bail!("HMAC_SECRET is required but not set");
+        }
+        if cfg.openrouter_api_key.is_empty() {
+            anyhow::bail!("OPENROUTER_API_KEY is required but not set");
+        }
+        if cfg.openrouter_model.is_empty() {
+            anyhow::bail!("OPENROUTER_MODEL is required but not set");
+        }
+
         Ok(cfg)
     }
 }
