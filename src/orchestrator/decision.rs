@@ -667,8 +667,27 @@ fn normalize_body_block_type(raw: &str) -> &'static str {
 }
 
 /// Ensure a string field is non-null and non-empty, providing a fallback.
+/// Optionally truncates to `max_len` to match Python Pydantic constraints.
 fn require_str(val: Option<&str>, fallback: &str) -> String {
     val.unwrap_or(fallback).to_string()
+}
+
+/// Safely truncate a string to max_len, respecting UTF-8 char boundaries.
+fn truncate_field(s: &str, max_len: usize) -> String {
+    let trimmed = s.trim();
+    let char_count = trimmed.chars().count();
+    if char_count <= max_len {
+        trimmed.to_string()
+    } else {
+        let truncated: String = trimmed.chars().take(max_len.saturating_sub(3)).collect();
+        format!("{}...", truncated)
+    }
+}
+
+/// Ensure a string field is non-null, non-empty, and within max_len.
+fn require_str_bounded(val: Option<&str>, fallback: &str, max_len: usize) -> String {
+    let s = val.unwrap_or(fallback);
+    truncate_field(s, max_len)
 }
 
 /// Build a generation spec payload (for the Python renderer).
@@ -730,9 +749,9 @@ fn build_generation_spec(
         .get("language")
         .and_then(|v| v.as_str());
 
-    let title = require_str(raw_title, teacher_prompt);
-    let summary = require_str(raw_summary, teacher_prompt);
-    let teacher_delivery_summary = require_str(raw_delivery, teacher_prompt);
+    let title = require_str_bounded(raw_title, teacher_prompt, 200);
+    let summary = require_str_bounded(raw_summary, teacher_prompt, 1000);
+    let teacher_delivery_summary = require_str_bounded(raw_delivery, teacher_prompt, 1000);
     let language = require_str(raw_language, "id");
     let source_schema_version = interpretation
         .get("schema_version")
@@ -785,7 +804,7 @@ fn build_generation_spec(
                                         } else {
                                             Some(serde_json::json!({
                                                 "type": normalize_body_block_type(btype),
-                                                "content": content,
+                                                "content": truncate_field(content, 1000),
                                             }))
                                         }
                                     })
@@ -807,8 +826,8 @@ fn build_generation_spec(
                             });
 
                         serde_json::json!({
-                            "title": s_title,
-                            "purpose": s_purpose,
+                            "title": truncate_field(s_title, 200),
+                            "purpose": truncate_field(s_purpose, 500),
                             "body_blocks": body_blocks,
                             "emphasis": normalize_emphasis(raw_emphasis),
                         })
@@ -853,7 +872,7 @@ fn build_generation_spec(
                                         } else {
                                             Some(serde_json::json!({
                                                 "type": "bullet",
-                                                "content": content,
+                                                "content": truncate_field(content, 1000),
                                             }))
                                         }
                                     })
@@ -875,8 +894,8 @@ fn build_generation_spec(
                             });
 
                         serde_json::json!({
-                            "title": s_title,
-                            "purpose": s_purpose,
+                            "title": truncate_field(s_title, 200),
+                            "purpose": truncate_field(s_purpose, 500),
                             "body_blocks": body_blocks,
                             "emphasis": normalize_emphasis(raw_emphasis),
                         })
@@ -923,15 +942,18 @@ fn build_generation_spec(
         })
         .unwrap_or_default();
 
-    let style_tone = interpretation
-        .pointer("/requested_media_characteristics/tone")
-        .and_then(|v| v.as_str())
-        .or_else(|| {
-            interpretation
-                .pointer("/constraints/tone")
-                .and_then(|v| v.as_str())
-        })
-        .unwrap_or("clear_and_structured");
+    let style_tone = truncate_field(
+        interpretation
+            .pointer("/requested_media_characteristics/tone")
+            .and_then(|v| v.as_str())
+            .or_else(|| {
+                interpretation
+                    .pointer("/constraints/tone")
+                    .and_then(|v| v.as_str())
+            })
+            .unwrap_or("clear_and_structured"),
+        100,
+    );
 
     let mut format_prefs: Vec<Value> = interpretation
         .pointer("/requested_media_characteristics/format_preferences")
@@ -1003,7 +1025,10 @@ fn build_generation_spec(
         },
         "style_hints": {
             "tone": style_tone,
-            "audience_level": interpretation.pointer("/target_audience/level").and_then(|v| v.as_str()).unwrap_or("general"),
+            "audience_level": truncate_field(
+                interpretation.pointer("/target_audience/level").and_then(|v| v.as_str()).unwrap_or("general"),
+                100,
+            ),
             "format_preferences": format_prefs,
         },
         "page_or_slide_structure": {

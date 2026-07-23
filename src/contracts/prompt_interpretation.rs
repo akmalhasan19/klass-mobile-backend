@@ -734,6 +734,23 @@ fn repair_interpretation_json(raw: &str) -> String {
     }
 
     // ── 4. Fix document_blueprint ──────────────────────────────────────
+    // Handle document_blueprint being a string (LLM returned a plain string
+    // like "Presentasi PPT 6 slide..." instead of an object)
+    let bp_is_string = obj.get("document_blueprint")
+        .map_or(false, |v| v.is_string());
+    if bp_is_string {
+        let bp_str = obj["document_blueprint"].as_str().unwrap_or("").to_string();
+        obj.insert("document_blueprint".to_string(), serde_json::json!({
+            "title": truncate_str(&bp_str, 200),
+            "summary": truncate_str(&bp_str, 1000),
+            "sections": [{
+                "title": "Requested Content",
+                "purpose": truncate_str(&bp_str, 500),
+                "bullets": [truncate_str(&bp_str, 300)],
+                "estimated_length": "medium"
+            }]
+        }));
+    }
     if !obj.contains_key("document_blueprint") || obj["document_blueprint"].is_null() {
         // Check if LLM returned key aliases: "blueprint" or "document"
         if let Some(bp) = obj.remove("blueprint").or_else(|| obj.remove("document")) {
@@ -1171,10 +1188,13 @@ fn repair_section(s: &serde_json::Value) -> serde_json::Value {
         .filter(|s| !s.is_empty())
         .unwrap_or("Section content");
 
-    // Repair bullets — ensure at least one non-empty bullet
-    let bullets: Vec<String> = m.get("bullets")
-        .and_then(|b| b.as_array())
-        .map(|arr| {
+    // Repair bullets — handle string, array-of-strings, or missing
+    let bullets: Vec<String> = match m.get("bullets") {
+        // LLM returned bullets as a plain string instead of an array
+        Some(serde_json::Value::String(s)) if !s.is_empty() => {
+            vec![s.clone()]
+        }
+        Some(serde_json::Value::Array(arr)) => {
             arr.iter()
                 .filter_map(|b| match b {
                     serde_json::Value::String(s) if !s.is_empty() => Some(s.clone()),
@@ -1182,8 +1202,9 @@ fn repair_section(s: &serde_json::Value) -> serde_json::Value {
                     _ => None,
                 })
                 .collect()
-        })
-        .unwrap_or_default();
+        }
+        _ => Vec::new(),
+    };
 
     let bullets = if bullets.is_empty() {
         vec![purpose.to_string()]

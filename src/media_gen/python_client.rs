@@ -233,6 +233,18 @@ impl PythonMediaGeneratorClient {
         } else {
             let error_code = map_error_code(status.as_u16(), &body_value);
             let error_message = extract_error_message(&body_value);
+
+            // Log full validation error details for debugging
+            tracing::warn!(
+                generation_id = %generation_id,
+                job_id = %job_id,
+                http_status = status.as_u16(),
+                error_code = %error_code,
+                error_message = %error_message,
+                validation_details = %body_value,
+                "submit_job: Python renderer rejected the request"
+            );
+
             Err(PythonClientError::RendererError {
                 code: error_code,
                 message: error_message,
