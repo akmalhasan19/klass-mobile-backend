@@ -1649,7 +1649,41 @@ fn build_interpreted_fields_from_payload(payload: &InterpretationPayload) -> Int
 }
 
 /// Build a fallback interpretation payload when the provider response is invalid.
-pub fn fallback(teacher_prompt: &str) -> InterpretationPayload {
+pub fn fallback(teacher_prompt: &str, preferred_output_type: &str) -> InterpretationPayload {
+    let mut normalized_pref = preferred_output_type.to_lowercase();
+    let prompt_lower = teacher_prompt.to_lowercase();
+    
+    if normalized_pref == "auto" {
+        if prompt_lower.contains("ppt") || prompt_lower.contains("powerpoint") || prompt_lower.contains("slide") || prompt_lower.contains("presentasi") {
+            normalized_pref = "pptx".to_string();
+        } else if prompt_lower.contains("word") || prompt_lower.contains("docx") || prompt_lower.contains("dokumen") {
+            normalized_pref = "docx".to_string();
+        } else {
+            normalized_pref = "pdf".to_string(); // default
+        }
+    }
+
+    let mut candidates = vec![
+        OutputCandidate {
+            r#type: "pdf".to_string(),
+            score: if normalized_pref == "pdf" { 0.95 } else { 0.40 },
+            reason: "Default PDF fallback.".to_string(),
+        },
+        OutputCandidate {
+            r#type: "docx".to_string(),
+            score: if normalized_pref == "docx" { 0.95 } else { 0.40 },
+            reason: "Default DOCX fallback.".to_string(),
+        },
+        OutputCandidate {
+            r#type: "pptx".to_string(),
+            score: if normalized_pref == "pptx" { 0.95 } else { 0.40 },
+            reason: "Default PPTX fallback.".to_string(),
+        },
+    ];
+
+    candidates.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    let top_type = candidates.first().map(|c| c.r#type.clone()).unwrap_or_else(|| "pdf".to_string());
+
     InterpretationPayload {
         schema_version: SCHEMA_VERSION.to_string(),
         teacher_prompt: teacher_prompt.to_string(),
@@ -1662,30 +1696,14 @@ pub fn fallback(teacher_prompt: &str) -> InterpretationPayload {
         },
         learning_objectives: vec![],
         constraints: InterpretationConstraints {
-            preferred_output_type: "auto".to_string(),
+            preferred_output_type: preferred_output_type.to_string(),
             max_duration_minutes: None,
             must_include: vec![],
             avoid: vec![],
             tone: None,
         },
-        output_type_candidates: vec![
-            OutputCandidate {
-                r#type: "pdf".to_string(),
-                score: 0.82,
-                reason: "Default PDF fallback.".to_string(),
-            },
-            OutputCandidate {
-                r#type: "docx".to_string(),
-                score: 0.64,
-                reason: "Default DOCX fallback.".to_string(),
-            },
-            OutputCandidate {
-                r#type: "pptx".to_string(),
-                score: 0.46,
-                reason: "Default PPTX fallback.".to_string(),
-            },
-        ],
-        resolved_output_type_reasoning: "Default PDF fallback from interpretation contract.".to_string(),
+        output_type_candidates: candidates,
+        resolved_output_type_reasoning: format!("Fallback honored output type: {}", top_type),
         document_blueprint: DocumentBlueprint {
             title: truncate_str(teacher_prompt, 200),
             summary: truncate_str(teacher_prompt, 1000),

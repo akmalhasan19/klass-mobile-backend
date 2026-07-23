@@ -670,12 +670,8 @@ impl InterpretService {
                             (enriched, false, None)
                         }
                         Err(validation_err) => {
-                            tracing::warn!(
-                                request_id = %request_id,
-                                error = %validation_err,
-                                "interpret: contract validation failed, using fallback"
-                            );
-                            let fallback_payload = fallback(&input.teacher_prompt);
+                            tracing::warn!(error = %validation_err, "interpret: contract validation failed, using fallback");
+                            let fallback_payload = fallback(&input.teacher_prompt, &input.preferred_output_type);
                             (fallback_payload, true, Some(validation_err))
                         }
                     };
@@ -1171,7 +1167,7 @@ mod tests {
 
     #[test]
     fn test_interpret_result_defaults() {
-        let payload = fallback("test prompt");
+        let payload = fallback("test prompt", "auto");
         let result = InterpretResult {
             request_id: "req-1".to_string(),
             generation_id: "gen-1".to_string(),
@@ -1199,7 +1195,7 @@ mod tests {
         headers.insert("x-klass-cache-status".to_string(), "hit".to_string());
         headers.insert("x-klass-fallback-used".to_string(), "false".to_string());
 
-        let payload = fallback("Buatkan modul");
+        let payload = fallback("Buatkan modul", "auto");
         let result = InterpretResult {
             request_id: "req-2".to_string(),
             generation_id: "gen-2".to_string(),
@@ -1254,7 +1250,7 @@ mod tests {
 
     #[test]
     fn test_audit_payload_build() {
-        let _payload = fallback("Buatkan materi");
+        let _payload = fallback("Buatkan materi", "auto");
 
         // Test build_audit_payload as a pure function by checking the structure
         // This tests the audit payload shape without needing DB repos
@@ -1310,7 +1306,7 @@ mod tests {
 
     #[test]
     fn test_interpret_result_cache_hit_propagation() {
-        let payload = fallback("test");
+        let payload = fallback("test", "auto");
         let result = InterpretResult {
             request_id: "req-cache".to_string(),
             generation_id: "gen-cache".to_string(),
