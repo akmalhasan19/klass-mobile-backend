@@ -90,8 +90,14 @@ async fn run_server_with_worker(config: AppConfig) -> anyhow::Result<()> {
         let worker_config = config.clone();
         let worker_state = state.clone();
         tokio::spawn(async move {
-            if let Err(e) = run_embedded_worker(worker_config, worker_state).await {
-                tracing::error!(error = %e, "Embedded worker exited with error");
+            loop {
+                if let Err(e) = run_embedded_worker(worker_config.clone(), worker_state.clone()).await {
+                    tracing::error!(error = %e, "Embedded worker exited with error, restarting in 5 seconds...");
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                } else {
+                    tracing::info!("Embedded worker exited gracefully");
+                    break;
+                }
             }
         });
         info!("Embedded worker spawned as background task");
