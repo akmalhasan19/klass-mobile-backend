@@ -27,6 +27,7 @@ pub struct AppConfig {
     pub openrouter_api_key: String,
     pub openrouter_model: String,
     pub openrouter_base_url: String,
+    pub openrouter_fallback_models: String,
 
     pub llm_adapter_fallback_url: String,
 
@@ -138,6 +139,7 @@ impl AppConfig {
             .set_default("cors_allowed_origins", "")?
             .set_default("openrouter_model", "minimax/minimax-m3")?
             .set_default("openrouter_base_url", "https://openrouter.ai/api/v1")?
+            .set_default("openrouter_fallback_models", "google/gemini-2.5-flash,meta-llama/llama-3.3-70b-instruct")?
             .set_default("llm_adapter_fallback_url", "")?
             .set_default("media_gen_webhook_secret", "")?
             .set_default("media_gen_hmac_secret", "")?

@@ -68,6 +68,9 @@ pub struct CompletionRequest {
     /// Model identifier (if empty, provider uses its default model).
     #[serde(skip_serializing_if = "String::is_empty")]
     pub model: String,
+    /// Fallback models to try in order (for OpenRouter native failover).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub models: Option<Vec<String>>,
     /// Conversation messages.
     pub messages: Vec<ChatMessage>,
     /// Optional response format (e.g. JSON mode).
@@ -87,6 +90,7 @@ impl CompletionRequest {
         let model = model.to_string();
         Self {
             model,
+            models: None,
             messages,
             response_format: None,
             max_tokens: None,
@@ -210,6 +214,7 @@ mod tests {
     fn test_completion_request_optional_fields() {
         let req = CompletionRequest {
             model: "test".to_string(),
+            models: None,
             messages: vec![],
             response_format: Some(ResponseFormat {
                 format_type: "json_object".to_string(),
@@ -234,6 +239,7 @@ mod tests {
     fn test_completion_request_skips_empty_model() {
         let req = CompletionRequest {
             model: "".to_string(),
+            models: None,
             messages: vec![],
             response_format: None,
             max_tokens: None,

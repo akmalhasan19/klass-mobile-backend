@@ -266,6 +266,7 @@ mod tests {
             openrouter_api_key: String::new(),
             openrouter_model: String::new(),
             openrouter_base_url: String::new(),
+            openrouter_fallback_models: String::new(),
             media_generation: crate::config::MediaGenerationConfig {
                 interpreter: crate::config::ServiceTimeoutsConfig {
                     timeout_seconds: 30.0, connect_timeout_seconds: 10.0,
@@ -387,6 +388,7 @@ mod tests {
             openrouter_api_key: String::new(),
             openrouter_model: String::new(),
             openrouter_base_url: String::new(),
+            openrouter_fallback_models: String::new(),
             media_generation: crate::config::MediaGenerationConfig {
                 interpreter: crate::config::ServiceTimeoutsConfig {
                     timeout_seconds: 30.0, connect_timeout_seconds: 10.0,

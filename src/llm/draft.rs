@@ -144,7 +144,7 @@ The JSON must follow this exact schema:
 7. \"timeline_process\" — Horizontal step flow (Step 1 → Step 2 → Step 3).
 8. \"quote_callout\" — Quote slide for key statements, testimonials, or vision.
 
-## 3 GOLDEN RULES (MANDATORY)
+## 4 GOLDEN RULES (MANDATORY)
 
 1. WORD COUNT LIMITS:
    - Slide title: Max 6 words.
@@ -159,6 +159,11 @@ The JSON must follow this exact schema:
 3. STRICT JSON STRUCTURE:
    - Response MUST be pure JSON only.
    - No narrative text, explanations, or comments outside the JSON.
+
+4. SLIDE ALIGNMENT AND CONTENT:
+   - Use the input `sections` and `teacher_prompt` (especially the slide-by-slide details under 'Rincian isi per slide:') as the source of truth.
+   - For each section/slide specified in the input, generate exactly one matching slide in the output `slides` array (excluding the title slide).
+   - The title and content of each slide MUST be unique, meaningful, and directly reflect the specific title and details/purpose provided for that slide. Do NOT use generic placeholder content.
 
 ## CONTENT ITEMS FORMAT
 
@@ -576,6 +581,7 @@ impl DraftService {
     ) -> Result<DraftResult, DraftError> {
         // Build the user payload from the interpretation
         let user_payload = serde_json::json!({
+            "teacher_prompt": input.interpretation.teacher_prompt,
             "output_type": input.resolved_output_type,
             "title": input.interpretation.document_blueprint.title,
             "summary": input.interpretation.document_blueprint.summary,

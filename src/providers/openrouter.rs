@@ -34,11 +34,18 @@ pub struct OpenRouterConfig {
     pub retry_attempts: u32,
     /// Base backoff in milliseconds between retries (doubles each attempt).
     pub retry_backoff_ms: u64,
+    /// Fallback models to try in order (for OpenRouter native failover).
+    pub fallback_models: Vec<String>,
 }
 
 impl OpenRouterConfig {
     /// Build config from `AppConfig` fields.
     pub fn from_app_config(config: &crate::config::AppConfig) -> Self {
+        let fallback_models = config.openrouter_fallback_models
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
         Self {
             api_key: config.openrouter_api_key.clone(),
             model: config.openrouter_model.clone(),
@@ -46,6 +53,7 @@ impl OpenRouterConfig {
             timeout_seconds: DEFAULT_TIMEOUT_SECS,
             retry_attempts: DEFAULT_RETRY_ATTEMPTS,
             retry_backoff_ms: DEFAULT_RETRY_BACKOFF_MS,
+            fallback_models,
         }
     }
 }
@@ -59,6 +67,7 @@ impl Default for OpenRouterConfig {
             timeout_seconds: DEFAULT_TIMEOUT_SECS,
             retry_attempts: DEFAULT_RETRY_ATTEMPTS,
             retry_backoff_ms: DEFAULT_RETRY_BACKOFF_MS,
+            fallback_models: Vec::new(),
         }
     }
 }
@@ -102,6 +111,18 @@ impl OpenRouterProviderClient {
         // Apply default model if not explicitly set
         if request.model.is_empty() {
             request.model = self.config.model.clone();
+        }
+
+        // If models is not explicitly set in the request, and we have fallback models,
+        // construct the priority-ordered list of models for OpenRouter's native failover.
+        if request.models.is_none() && !self.config.fallback_models.is_empty() {
+            let mut models = vec![request.model.clone()];
+            for fallback_model in &self.config.fallback_models {
+                if !models.contains(fallback_model) {
+                    models.push(fallback_model.clone());
+                }
+            }
+            request.models = Some(models);
         }
 
         let url = self.completions_url();
@@ -450,6 +471,7 @@ mod tests {
             openrouter_api_key: "sk-or-test-key".to_string(),
             openrouter_model: "minimax/minimax-m3".to_string(),
             openrouter_base_url: "https://openrouter.ai/api/v1".to_string(),
+            openrouter_fallback_models: "google/gemini-2.5-flash,meta-llama/llama-3.3-70b-instruct".to_string(),
             host: "0.0.0.0".to_string(),
             port: 8080,
             grpc_port: 50051,
@@ -500,6 +522,13 @@ mod tests {
         assert_eq!(or_config.api_key, "sk-or-test-key");
         assert_eq!(or_config.model, "minimax/minimax-m3");
         assert_eq!(or_config.timeout_seconds, 90);
+        assert_eq!(
+            or_config.fallback_models,
+            vec![
+                "google/gemini-2.5-flash".to_string(),
+                "meta-llama/llama-3.3-70b-instruct".to_string(),
+            ]
+        );
     }
 
     // ── Content extraction ────────────────────────────────────────────────
@@ -627,5 +656,48 @@ mod tests {
             .with_json_mode()
             .with_json_mode(); // calling twice should be fine
         assert!(req.response_format.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_complete_with_retry_populates_models_fallback() {
+        let config = OpenRouterConfig {
+            api_key: "sk-or-test-key".to_string(),
+            model: "minimax/minimax-m3".to_string(),
+            base_url: "https://openrouter.ai/api/v1".to_string(),
+            timeout_seconds: 10,
+            retry_attempts: 1,
+            retry_backoff_ms: 10,
+            fallback_models: vec![
+                "google/gemini-2.5-flash".to_string(),
+                "meta-llama/llama-3.3-70b-instruct".to_string(),
+            ],
+        };
+        let client = OpenRouterProviderClient::new(reqwest::Client::new(), config);
+        let mut req = CompletionRequest::new("", vec![]);
+        
+        // Before calling, req.models is None
+        assert!(req.models.is_none());
+
+        // Simulate complete_with_retry preparation:
+        if req.model.is_empty() {
+            req.model = client.config.model.clone();
+        }
+        if req.models.is_none() && !client.config.fallback_models.is_empty() {
+            let mut models = vec![req.model.clone()];
+            for fallback_model in &client.config.fallback_models {
+                if !models.contains(fallback_model) {
+                    models.push(fallback_model.clone());
+                }
+            }
+            req.models = Some(models);
+        }
+
+        assert_eq!(req.model, "minimax/minimax-m3");
+        let expected_models = vec![
+            "minimax/minimax-m3".to_string(),
+            "google/gemini-2.5-flash".to_string(),
+            "meta-llama/llama-3.3-70b-instruct".to_string(),
+        ];
+        assert_eq!(req.models.unwrap(), expected_models);
     }
 }

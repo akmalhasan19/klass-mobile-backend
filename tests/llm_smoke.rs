@@ -302,6 +302,7 @@ async fn test_mockito_interpret_endpoint() {
         timeout_seconds: 10,
         retry_attempts: 1,
         retry_backoff_ms: 10,
+        fallback_models: Vec::new(),
     };
     let client = OpenRouterProviderClient::new(reqwest::Client::new(), config);
 
@@ -341,6 +342,7 @@ async fn test_mockito_draft_endpoint() {
         timeout_seconds: 10,
         retry_attempts: 1,
         retry_backoff_ms: 10,
+        fallback_models: Vec::new(),
     };
     let client = OpenRouterProviderClient::new(reqwest::Client::new(), config);
 
@@ -380,6 +382,7 @@ async fn test_mockito_respond_endpoint() {
         timeout_seconds: 10,
         retry_attempts: 1,
         retry_backoff_ms: 10,
+        fallback_models: Vec::new(),
     };
     let client = OpenRouterProviderClient::new(reqwest::Client::new(), config);
 
