@@ -1229,6 +1229,362 @@ fn truncate_str(value: &str, max: usize) -> String {
     }
 }
 
+/// Re-derive `plan_mode`, `interpreted_fields`, and `missing_fields` from the
+/// interpretation payload's content, producing fresh and contextual questions.
+///
+/// This is called after a **cache hit** so that PLAN MODE questions are always
+/// regenerated deterministically from the actual interpretation content, rather
+/// than returning stale frozen questions from a previous cache entry.
+///
+/// The function inspects which required fields are present/missing for the
+/// detected content type and builds contextual missing_field questions in
+/// Indonesian (Bahasa).
+pub fn regenerate_plan_mode_from_interpretation(mut payload: InterpretationPayload) -> InterpretationPayload {
+    // ── 1. Build interpreted_fields from the payload ────────────────────
+    let interpreted_fields = build_interpreted_fields_from_payload(&payload);
+
+    // ── 2. Detect content type ──────────────────────────────────────────
+    let detected_content_type = detect_content_type_from_payload(&payload);
+
+    // ── 3. Determine required fields per content type ───────────────────
+    let required_field_ids = content_type_required_fields(&detected_content_type);
+
+    // ── 4. Find missing required fields ─────────────────────────────────
+    let missing_field_ids = find_missing_required_fields(&payload, &required_field_ids);
+
+    // ── 5. Generate contextual missing_field questions ──────────────────
+    let missing_fields: Vec<MissingField> = missing_field_ids
+        .iter()
+        .map(|field_id| generate_contextual_missing_field(field_id, &payload, &detected_content_type))
+        .collect();
+
+    // ── 6. Derive plan_mode ─────────────────────────────────────────────
+    let plan_active = !missing_fields.is_empty();
+    let reason = if plan_active {
+        let missing_labels: Vec<&str> = missing_fields.iter().map(|f| f.field_label.as_str()).collect();
+        Some(format!(
+            "Berdasarkan analisis prompt, terdapat informasi yang belum lengkap untuk {}: {}. Silakan lengkapi informasi berikut agar media dapat dibuat dengan tepat.",
+            detected_content_type_label(&detected_content_type),
+            missing_labels.join(", ")
+        ))
+    } else {
+        None
+    };
+
+    // ── 7. Update payload ───────────────────────────────────────────────
+    payload.plan_mode = PlanMode {
+        active: plan_active,
+        reason,
+        detected_content_type: Some(detected_content_type.clone()),
+        content_type_confidence: Some(payload.confidence.score),
+    };
+    payload.interpreted_fields = Some(interpreted_fields);
+    payload.missing_fields = missing_fields;
+
+    // ── 8. Update requires_clarification to match ───────────────────────
+    payload.teacher_intent.requires_clarification = plan_active;
+
+    payload
+}
+
+/// Detect the content type from the interpretation payload.
+///
+/// Uses keyword analysis on the teacher prompt and blueprint title/summary
+/// to determine which content type best matches.
+fn detect_content_type_from_payload(payload: &InterpretationPayload) -> String {
+    let text = format!(
+        "{} {} {}",
+        payload.teacher_prompt.to_lowercase(),
+        payload.document_blueprint.title.to_lowercase(),
+        payload.document_blueprint.summary.to_lowercase(),
+    );
+
+    // Score each content type by keyword matches
+    let mut scores: Vec<(&str, i32)> = vec![
+        ("slide_presentasi", 0),
+        ("rpp", 0),
+        ("lembar_kerja", 0),
+        ("penilaian", 0),
+        ("silabus", 0),
+        ("materi_pembelajaran", 0),
+    ];
+
+    for (content_type, score) in scores.iter_mut() {
+        *score = content_type_keywords(content_type)
+            .iter()
+            .filter(|kw| text.contains(*kw))
+            .count() as i32;
+    }
+
+    scores.sort_by(|a, b| b.1.cmp(&a.1));
+
+    // If top score is 0, default to materi_pembelajaran
+    if scores[0].1 == 0 {
+        "materi_pembelajaran".to_string()
+    } else {
+        scores[0].0.to_string()
+    }
+}
+
+/// Keywords used to detect each content type from the prompt text.
+fn content_type_keywords(content_type: &str) -> Vec<&'static str> {
+    match content_type {
+        "slide_presentasi" => vec!["slide", "presentasi", "powerpoint", "pptx", "tayangan"],
+        "rpp" => vec!["rpp", "rencana pelaksanaan", "lesson plan", "perencanaan pembelajaran"],
+        "lembar_kerja" => vec!["lembar kerja", "worksheet", "latihan", "praktik"],
+        "penilaian" => vec!["penilaian", "asesmen", "assessment", "soal", "ujian", "tes"],
+        "silabus" => vec!["silabus", "syllabus", "kurikulum"],
+        "materi_pembelajaran" => vec!["materi", "modul", "handout", "bahan ajar", "pelajaran", "belajar"],
+        _ => vec![],
+    }
+}
+
+/// Required fields per content type.
+fn content_type_required_fields(content_type: &str) -> Vec<&'static str> {
+    match content_type {
+        "slide_presentasi" => vec!["target_audience", "output_type"],
+        "rpp" => vec!["target_audience", "learning_objectives"],
+        "lembar_kerja" => vec!["target_audience", "difficulty_level"],
+        "penilaian" => vec!["target_audience", "difficulty_level", "question_count"],
+        "silabus" => vec!["target_audience"],
+        "materi_pembelajaran" => vec!["target_audience", "output_type"],
+        _ => vec!["target_audience"],
+    }
+}
+
+/// User-friendly label for each content type.
+fn detected_content_type_label(content_type: &str) -> String {
+    match content_type {
+        "slide_presentasi" => "slide presentasi".to_string(),
+        "rpp" => "Rencana Pelaksanaan Pembelajaran (RPP)".to_string(),
+        "lembar_kerja" => "lembar kerja".to_string(),
+        "penilaian" => "penilaian/asesmen".to_string(),
+        "silabus" => "silabus".to_string(),
+        "materi_pembelajaran" => "materi pembelajaran".to_string(),
+        _ => "media pembelajaran".to_string(),
+    }
+}
+
+/// Check which required fields are missing from the interpretation payload.
+fn find_missing_required_fields(payload: &InterpretationPayload, required: &[&str]) -> Vec<String> {
+    let mut missing = Vec::new();
+
+    for field_id in required {
+        let is_present = match *field_id {
+            "target_audience" => payload.target_audience.is_some(),
+            "output_type" => {
+                payload.constraints.preferred_output_type != "auto"
+            }
+            "learning_objectives" => !payload.learning_objectives.is_empty(),
+            "difficulty_level" => payload
+                .interpreted_fields
+                .as_ref()
+                .and_then(|f| f.difficulty_level.as_ref())
+                .is_some(),
+            "question_count" => payload
+                .interpreted_fields
+                .as_ref()
+                .and_then(|f| f.question_count)
+                .is_some(),
+            _ => false,
+        };
+
+        if !is_present {
+            missing.push(field_id.to_string());
+        }
+    }
+
+    missing
+}
+
+/// Generate a contextual missing field question based on what is actually
+/// missing, the detected content type, and the teacher's prompt context.
+fn generate_contextual_missing_field(
+    field_id: &str,
+    payload: &InterpretationPayload,
+    content_type: &str,
+) -> MissingField {
+    let topic_hint = &payload.document_blueprint.title;
+    let subject_hint = payload
+        .subject_context
+        .as_ref()
+        .map(|sc| sc.subject_name.as_str())
+        .unwrap_or("pelajaran ini");
+
+    match field_id {
+        "target_audience" => {
+            let (label, question, input_type) = match content_type {
+                "slide_presentasi" => (
+                    "Jenjang/Kelas",
+                    format!("Slide presentasi '{}' ini ditujukan untuk siswa jenjang/kelas mana?", topic_hint),
+                    "select",
+                ),
+                "rpp" => (
+                    "Jenjang/Kelas",
+                    format!("RPP '{}' ini disusun untuk jenjang/kelas berapa?", topic_hint),
+                    "select",
+                ),
+                _ => (
+                    "Jenjang/Kelas",
+                    format!("Materi '{}' untuk {} ini ditujukan untuk siswa jenjang/kelas mana?", topic_hint, subject_hint),
+                    "select",
+                ),
+            };
+            MissingField {
+                field_id: "target_audience".to_string(),
+                field_label: label.to_string(),
+                priority: "required".to_string(),
+                question,
+                suggestions: vec_jenjang_suggestions(),
+                input_type: input_type.to_string(),
+            }
+        }
+        "output_type" => {
+            let (question, suggestions) = match content_type {
+                "slide_presentasi" => (
+                    format!("Format file apa yang Anda inginkan untuk slide '{}' ini?", topic_hint),
+                    vec![
+                        serde_json::json!({"value": "pptx", "label": "PowerPoint (.pptx)"}),
+                        serde_json::json!({"value": "pdf", "label": "PDF (cetak)"}),
+                    ],
+                ),
+                _ => (
+                    format!("Format file apa yang Anda inginkan untuk materi '{}' ini?", topic_hint),
+                    vec![
+                        serde_json::json!({"value": "pdf", "label": "PDF (cetak)"}),
+                        serde_json::json!({"value": "docx", "label": "Word (.docx)"}),
+                        serde_json::json!({"value": "pptx", "label": "PowerPoint (.pptx)"}),
+                    ],
+                ),
+            };
+            MissingField {
+                field_id: "output_type".to_string(),
+                field_label: "Format Output".to_string(),
+                priority: "required".to_string(),
+                question,
+                suggestions,
+                input_type: "select".to_string(),
+            }
+        }
+        "learning_objectives" => MissingField {
+            field_id: "learning_objectives".to_string(),
+            field_label: "Tujuan Pembelajaran".to_string(),
+            priority: "required".to_string(),
+            question: format!(
+                "Apa saja tujuan pembelajaran yang ingin dicapai dari '{}'? {}",
+                topic_hint,
+                "Contoh: Memahami konsep X, Menganalisis Y, Menerapkan Z."
+            ),
+            suggestions: vec_string_suggestions(&["Memahami konsep...", "Menganalisis...", "Menerapkan...", "Menjelaskan..."]),
+            input_type: "textarea".to_string(),
+        },
+        "difficulty_level" => MissingField {
+            field_id: "difficulty_level".to_string(),
+            field_label: "Tingkat Kesulitan".to_string(),
+            priority: "required".to_string(),
+            question: format!(
+                "Tingkat kesulitan materi '{}' ini sebaiknya seperti apa?",
+                topic_hint
+            ),
+            suggestions: vec_string_suggestions(&["Mudah (pengenalan dasar)", "Sedang (pemahaman konsep)", "Sulit (analisis dan evaluasi)"]),
+            input_type: "select".to_string(),
+        },
+        "question_count" => MissingField {
+            field_id: "question_count".to_string(),
+            field_label: "Jumlah Soal".to_string(),
+            priority: "required".to_string(),
+            question: format!(
+                "Berapa jumlah soal yang Anda butuhkan untuk asesmen '{}' ini?",
+                topic_hint
+            ),
+            suggestions: vec_number_suggestions(&[10, 15, 20, 25, 30]),
+            input_type: "number".to_string(),
+        },
+        _ => MissingField {
+            field_id: field_id.to_string(),
+            field_label: field_id.replace('_', " ").to_string(),
+            priority: "recommended".to_string(),
+            question: format!("Informasi '{}' belum terdeteksi. Mohon lengkapi jika diperlukan.", field_id),
+            suggestions: vec![],
+            input_type: "text".to_string(),
+        },
+    }
+}
+
+/// Build a Vec<serde_json::Value> of jenjang/kelas suggestion strings.
+fn vec_jenjang_suggestions() -> Vec<serde_json::Value> {
+    vec_string_suggestions(&[
+        "SD Kelas 1", "SD Kelas 2", "SD Kelas 3",
+        "SD Kelas 4", "SD Kelas 5", "SD Kelas 6",
+        "SMP Kelas 7", "SMP Kelas 8", "SMP Kelas 9",
+        "SMA Kelas 10", "SMA Kelas 11", "SMA Kelas 12",
+    ])
+}
+
+/// Build a Vec<serde_json::Value> from a list of string slices.
+fn vec_string_suggestions(items: &[&str]) -> Vec<serde_json::Value> {
+    items.iter().map(|s| serde_json::json!(s)).collect()
+}
+
+/// Build a Vec<serde_json::Value> from a list of i32 values.
+fn vec_number_suggestions(items: &[i32]) -> Vec<serde_json::Value> {
+    items.iter().map(|n| serde_json::json!(n)).collect()
+}
+
+/// Build interpreted_fields from the interpretation payload content.
+/// Preserves existing values from the payload's interpreted_fields when available,
+/// and only fills in what can be derived from the main payload.
+fn build_interpreted_fields_from_payload(payload: &InterpretationPayload) -> InterpretedFields {
+    // Start from the existing interpreted_fields if present, to preserve
+    // values the LLM already extracted (difficulty_level, question_count, etc.)
+    let existing = payload.interpreted_fields.as_ref();
+
+    let target_audience = payload.target_audience.as_ref().map(|ta| {
+        match &ta.level {
+            Some(level) => format!("{} {}", ta.label, level),
+            None => ta.label.clone(),
+        }
+    });
+
+    let output_type = if payload.constraints.preferred_output_type != "auto" {
+        Some(payload.constraints.preferred_output_type.clone())
+    } else {
+        // Infer from top output_type_candidate
+        payload.output_type_candidates.first().map(|c| c.r#type.clone())
+    };
+
+    let subject = payload.subject_context.as_ref().map(|sc| sc.subject_name.clone());
+    let topic = Some(payload.document_blueprint.title.clone());
+
+    let learning_objectives = if payload.learning_objectives.is_empty() {
+        None
+    } else {
+        Some(payload.learning_objectives.clone())
+    };
+
+    InterpretedFields {
+        // Prefer freshly derived values, fall back to existing
+        target_audience: target_audience.or_else(|| existing.and_then(|e| e.target_audience.clone())),
+        output_type: output_type.or_else(|| existing.and_then(|e| e.output_type.clone())),
+        subject: subject.or_else(|| existing.and_then(|e| e.subject.clone())),
+        topic: topic.or_else(|| existing.and_then(|e| e.topic.clone())),
+        learning_objectives: learning_objectives.or_else(|| existing.and_then(|e| e.learning_objectives.clone())),
+        // Preserve all other fields from the original payload
+        page_count: existing.and_then(|e| e.page_count.clone()),
+        difficulty_level: existing.and_then(|e| e.difficulty_level.clone()),
+        include_activities: existing.and_then(|e| e.include_activities),
+        slide_count: existing.and_then(|e| e.slide_count.clone()),
+        question_count: existing.and_then(|e| e.question_count),
+        meeting_duration: existing.and_then(|e| e.meeting_duration.clone()),
+        teaching_method: existing.and_then(|e| e.teaching_method.clone()),
+        assessment_method: existing.and_then(|e| e.assessment_method.clone()),
+        visual_density: payload.requested_media_characteristics.visual_density.clone()
+            .or_else(|| existing.and_then(|e| e.visual_density.clone())),
+        speaker_notes: existing.and_then(|e| e.speaker_notes.clone()),
+        question_type: existing.and_then(|e| e.question_type.clone()),
+    }
+}
+
 /// Build a fallback interpretation payload when the provider response is invalid.
 pub fn fallback(teacher_prompt: &str) -> InterpretationPayload {
     InterpretationPayload {

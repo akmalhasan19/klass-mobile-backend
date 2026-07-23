@@ -24,7 +24,8 @@ use uuid::Uuid;
 
 use crate::cache::{build_cache_key, CacheRoute, LlmCacheRepo};
 use crate::contracts::prompt_interpretation::{
-    decode_and_validate, fallback, InterpretationPayload,
+    decode_and_validate, fallback, regenerate_plan_mode_from_interpretation,
+    InterpretationPayload,
 };
 use crate::governance::ledger::{CacheStatus, LedgerRepo};
 use crate::governance::price_catalog::PriceCatalogRepo;
@@ -432,6 +433,11 @@ impl InterpretService {
             let elapsed = start.elapsed();
             let latency_ms = Decimal::new(elapsed.as_millis() as i64, 3);
 
+            // Re-derive plan_mode, interpreted_fields, and missing_fields
+            // fresh from the interpretation payload. This ensures PLAN MODE
+            // questions are always contextual and unique, even on cache hit.
+            let payload = regenerate_plan_mode_from_interpretation(payload);
+
             // Record cache hit in ledger
             let _ = self
                 .ledger_repo
@@ -459,6 +465,7 @@ impl InterpretService {
                         "source": "interpretation_service",
                         "cache_hit": true,
                         "cache_source": "interpretation_cache",
+                        "plan_mode_regenerated": true,
                     }),
                 )
                 .await;
@@ -505,6 +512,9 @@ impl InterpretService {
                             },
                         )
                     })?;
+
+                // Re-derive plan_mode fresh from the interpretation payload
+                let payload = regenerate_plan_mode_from_interpretation(payload);
 
                 let elapsed = start.elapsed();
                 let latency_ms = Decimal::new(elapsed.as_millis() as i64, 3);
