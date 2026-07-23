@@ -1008,6 +1008,10 @@ fn repair_interpretation_json(raw: &str) -> String {
     }
 
     // ── 14. Fix interpreted_fields ───────────────────────────────────
+    // Auto-detect slide_count and page_count from the teacher prompt.
+    let detected_slide_count = detect_slide_count_from_prompt(&teacher_prompt);
+    let detected_page_count = detect_page_count_from_prompt(&teacher_prompt);
+
     if !obj.contains_key("interpreted_fields") || obj["interpreted_fields"].is_null() {
         // Build interpreted_fields from existing extracted data
         let target_audience = obj
@@ -1058,10 +1062,10 @@ fn repair_interpretation_json(raw: &str) -> String {
                 "subject": subject,
                 "topic": topic,
                 "learning_objectives": learning_objectives,
-                "page_count": null,
+                "page_count": detected_page_count,
                 "difficulty_level": null,
                 "include_activities": null,
-                "slide_count": null,
+                "slide_count": detected_slide_count,
                 "question_count": null,
                 "meeting_duration": null,
                 "teaching_method": null,
@@ -1071,6 +1075,24 @@ fn repair_interpretation_json(raw: &str) -> String {
                 "question_type": null,
             }),
         );
+    } else {
+        // ── 14b. Repair existing interpreted_fields with null slide/page counts ──
+        if let Some(ifields) = obj.get_mut("interpreted_fields").and_then(|v| v.as_object_mut()) {
+            // Fill in slide_count from prompt detection if LLM returned null
+            let slide_null = ifields.get("slide_count").map_or(true, |v| v.is_null());
+            if slide_null {
+                if let Some(sc) = &detected_slide_count {
+                    ifields.insert("slide_count".to_string(), serde_json::json!(sc));
+                }
+            }
+            // Fill in page_count from prompt detection if LLM returned null
+            let page_null = ifields.get("page_count").map_or(true, |v| v.is_null());
+            if page_null {
+                if let Some(pc) = &detected_page_count {
+                    ifields.insert("page_count".to_string(), serde_json::json!(pc));
+                }
+            }
+        }
     }
 
     // ── 15. Fix missing_fields ───────────────────────────────────────
@@ -1227,6 +1249,26 @@ fn truncate_str(value: &str, max: usize) -> String {
     } else {
         chars
     }
+}
+
+/// Auto-detect slide count from the teacher prompt.
+///
+/// Uses `content_standards::detect_slide_count` but only returns numeric
+/// values (e.g. "5") that can be parsed as i64 by `build_generation_spec`.
+/// Returns `None` for non-numeric results like "specified".
+fn detect_slide_count_from_prompt(prompt: &str) -> Option<String> {
+    use crate::standards::content_standards::detect_slide_count;
+    detect_slide_count(prompt).filter(|s| s.parse::<i64>().is_ok())
+}
+
+/// Auto-detect page count from the teacher prompt.
+///
+/// Uses `content_standards::detect_page_count` but only returns numeric
+/// values (e.g. "5") that can be parsed as i64 by `build_generation_spec`.
+/// Returns `None` for non-numeric results like "specified".
+fn detect_page_count_from_prompt(prompt: &str) -> Option<String> {
+    use crate::standards::content_standards::detect_page_count;
+    detect_page_count(prompt).filter(|s| s.parse::<i64>().is_ok())
 }
 
 /// Re-derive `plan_mode`, `interpreted_fields`, and `missing_fields` from the

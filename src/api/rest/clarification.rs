@@ -238,12 +238,24 @@ pub async fn preflight(
         let or_config = OpenRouterConfig::from_app_config(&state.config);
         let openrouter_client = OpenRouterProviderClient::new(state.http.clone(), or_config);
         
-        let system_instruction = "You are a curriculum design assistant. Given a learning topic, target audience, and slide count, generate a list of slide-by-slide suggestions for a presentation. Return a JSON object with a list of slides, each containing a title (e.g. 'Slide 1: ...') and exactly 3 short suggestion chips (in Indonesian, max 5 words each) for what the content of that slide could be.";
+        let system_instruction = "Anda adalah asisten desain kurikulum yang ahli dalam membuat presentasi pembelajaran yang menarik dan kontekstual.\n\nTugas Anda adalah membuat daftar saran slide-by-slide yang UNIK dan SESUAI KONTEKS untuk presentasi pembelajaran.\n\nPENTING:\n1. Judul setiap slide harus SPESIFIK dan RELEVAN dengan topik, bukan generik\n2. Saran konten harus CONTEKSTUAL - pertimbangkan:\n   - Topik spesifik (misal: 'Siklus Air' bukan sekadar 'Materi Umum')\n   - Tingkat kelas/audience (misal: kelas 4 SD butuh bahasa sederhana dan contoh sehari-hari)\n   - Subjek/mata pelajaran\n3. Gunakan bahasa Indonesia yang natural dan mudah dipahami\n4. Setiap saran harus max 5 kata\n5. Buat saran yang BERBEDA untuk setiap slide, jangan mengulang\n6. Pertimbangkan struktur presentasi yang efektif:\n   - Slide 1: Judul yang menarik (bukan sekadar 'Judul')\n   - Slide berikutnya: konten spesifik sesuai topik\n   - Slide terakhir: penutup/evaluasi yang relevan\n\nContoh untuk topik 'Siklus Air kelas 4 SD':\n- Slide 1: 'Siklus Air: Perjalanan Air di Sekitar Kita' (bukan 'Judul: Pembelajaran Siklus Air')\n- Slide 2: 'Air Menguap dari Laut dan Sungai' (bukan 'Definisi Dasar Siklus Air')\n- Slide 3: 'Uap Air Membentuk Awan' (bukan 'Contoh Pertama Siklus Air')\n\nReturn a JSON object with a list of slides, each containing:\n- slide_index: nomor slide\n- slide_title: judul slide yang SPESIFIK dan menarik (bukan generik)\n- suggestions: exactly 3 saran konten (value dan label, max 5 kata)";
+        // Build enriched context for the LLM
+        let subject = response_data.detected.subject.as_deref().unwrap_or("");
+        let audience = response_data.detected.audience.as_deref().unwrap_or("Umum");
+        
         let user_prompt = format!(
-            "Topic: {}\nGrade/Audience: {}\nSlide Count: {}\nReturn a JSON object in this exact format:\n{{\n  \"slides\": [\n    {{\n      \"slide_index\": 1,\n      \"slide_title\": \"Slide 1: Pembuka\",\n      \"suggestions\": [\n        {{\"value\": \"value1\", \"label\": \"label1\"}},\n        {{\"value\": \"value2\", \"label\": \"label2\"}},\n        {{\"value\": \"value3\", \"label\": \"label3\"}}\n      ]\n    }}\n  ]\n}}",
-            topic,
-            response_data.detected.audience.as_deref().unwrap_or("Umum"),
-            slide_count
+            "KONTEKS PEMBUATAN PRESENTASI:\n\nTopik: {topic}\nMata Pelajaran: {subject}\nTarget Audience/Kelas: {audience}\nJumlah Slide: {slide_count}\n\n\
+INSTRUKSI:\n\
+Buatkan daftar saran slide-by-slide yang SPESIFIK dan UNIK untuk presentasi pembelajaran ini.\n\
+Setiap slide harus memiliki judul yang RELEVAN dengan topik dan konteks, bukan judul generik.\n\
+Saran konten harus CONTEKSTUAL dan SESUAI dengan tingkat pemahaman audience.\n\n\
+Contoh yang BAIK (untuk topik 'Siklus Air', Kelas 4 SD):\n\
+- Slide 1: 'Siklus Air: Perjalanan Air di Sekitar Kita' dengan saran: ['Air menguap dari laut', 'Uap naik ke langit', 'Awan terbentuk']\n\
+- Slide 2: 'Menguap dan Mengembun' dengan saran: ['Air panas jadi uap', 'Uap dingin jadi air', 'Fase dalam siklus']\n\n\
+Contoh yang BURUK (jangan lakukan ini):\n\
+- Slide 1: 'Judul: Pembelajaran Siklus Air' - ini terlalu generik\n\
+- Slide 2: 'Definisi Dasar Siklus Air' - ini tidak kontekstual\n\n\
+Return a JSON object in this exact format:\n{{\n  \"slides\": [\n    {{\n      \"slide_index\": 1,\n      \"slide_title\": \"Judul yang Spesifik dan Menarik\",\n      \"suggestions\": [\n        {{\"value\": \"saran kontekstual 1\", \"label\": \"label 1\"}},\n        {{\"value\": \"saran kontekstual 2\", \"label\": \"label 2\"}},\n        {{\"value\": \"saran kontekstual 3\", \"label\": \"label 3\"}}\n      ]\n    }}\n  ]\n}}", topic = topic, subject = subject, audience = audience, slide_count = slide_count
         );
 
         // Prepare request

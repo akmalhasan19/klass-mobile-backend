@@ -240,9 +240,11 @@ impl Provider for OpenRouterProviderClient {
 ///
 /// Priority:
 /// 1. `choices[0].message.content` (standard OpenAI format)
-/// 2. `output_text` field (alternative non-standard format)
-/// 3. `content` array of strings or `{text: "..."}` objects (alternative format)
-/// 4. Any non-null, non-empty string field found in the response
+/// 2. `choices[0].message.reasoning_content` (reasoning models)
+/// 3. `output_text` field (alternative non-standard format)
+/// 4. `content` array of strings or `{text: "..."}` objects (alternative format)
+/// 5. `choices[0].text` (completion-style format)
+/// 6. Any non-null, non-empty string field found in the response
 pub fn extract_content(raw: &serde_json::Value) -> Option<String> {
     // Strategy 1: choices[0].message.content
     if let Some(content) = raw
@@ -255,6 +257,35 @@ pub fn extract_content(raw: &serde_json::Value) -> Option<String> {
     {
         if !content.is_empty() {
             return Some(clean_markdown_json(content));
+        }
+    }
+
+    // Strategy 1b: choices[0].message — content may be null; check for
+    // reasoning_content, text, or other content-like fields on the message object.
+    if let Some(message) = raw
+        .get("choices")
+        .and_then(|c| c.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|choice| choice.get("message"))
+    {
+        // Some reasoning models put the answer in `reasoning_content`.
+        if let Some(text) = message
+            .get("reasoning_content")
+            .and_then(|v| v.as_str())
+        {
+            if !text.is_empty() {
+                return Some(clean_markdown_json(text));
+            }
+        }
+        // Iterate all string-typed fields on the message object.
+        if let Some(obj) = message.as_object() {
+            for (key, val) in obj {
+                if let Some(text) = val.as_str() {
+                    if !text.is_empty() && key != "role" {
+                        return Some(clean_markdown_json(text));
+                    }
+                }
+            }
         }
     }
 
@@ -294,6 +325,21 @@ pub fn extract_content(raw: &serde_json::Value) -> Option<String> {
     {
         if !text.is_empty() {
             return Some(clean_markdown_json(text));
+        }
+    }
+
+    // Strategy 5: scan top-level non-null string fields (e.g. output_text,
+    // generated_text, result, etc.).
+    if let Some(obj) = raw.as_object() {
+        for (key, val) in obj {
+            if key == "model" || key == "id" || key == "object" {
+                continue;
+            }
+            if let Some(text) = val.as_str() {
+                if !text.is_empty() {
+                    return Some(clean_markdown_json(text));
+                }
+            }
         }
     }
 

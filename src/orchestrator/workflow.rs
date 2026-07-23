@@ -566,11 +566,20 @@ impl WorkflowService {
         Ok(current.status_before(checkpoint))
     }
 
-    /// Check if classification is complete (interpretation + spec + resolved type).
+    /// Check if classification is complete (interpretation + draft + spec + resolved type).
+    ///
+    /// Previously this only checked that interpretation, spec, and resolved type
+    /// existed.  That caused a bug: if interpret succeeded but draft failed, the
+    /// next retry saw all three fields (spec was built from interpretation-only)
+    /// and skipped the entire classify step — including the draft.  The result
+    /// was a PPTX with only the minimal interpretation blueprint sections.
+    ///
+    /// Now we also verify that the draft was actually completed by checking
+    /// `decision_payload->'content_draft'->>'source'` is NOT `'interpretation_only'`.
     async fn has_classification(&self, generation_id: &str) -> Result<bool, WorkflowError> {
-        let row: Option<(Option<Value>, Option<Value>, Option<String>)> = sqlx::query_as(
+        let row: Option<(Option<String>,)> = sqlx::query_as(
             r#"
-            SELECT interpretation_payload, generation_spec_payload, resolved_output_type
+            SELECT decision_payload->'content_draft'->>'source' AS draft_source
             FROM media_generations
             WHERE id = $1
               AND interpretation_payload IS NOT NULL
@@ -588,7 +597,20 @@ impl WorkflowService {
         .await
         .map_err(WorkflowError::Database)?;
 
-        Ok(row.is_some())
+        match row {
+            // Classification is only complete when the draft was actually
+            // delivered by a provider/adapter — not when we only have the
+            // interpretation blueprint fallback.
+            Some((Some(ref source),)) if source == "interpretation_only" => {
+                tracing::debug!(
+                    generation_id = %generation_id,
+                    "has_classification: draft_source is interpretation_only — re-running classify"
+                );
+                Ok(false)
+            }
+            Some(_) => Ok(true),
+            None => Ok(false),
+        }
     }
 
 
