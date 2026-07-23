@@ -9,7 +9,7 @@
 
 use klass_gateway::providers::{
     extract_content, json_mode_request, ChatMessage, CompletionRequest,
-    CompletionResponse, OpenRouterConfig, OpenRouterProviderClient,
+    OpenRouterConfig, OpenRouterProviderClient, Provider,
 };
 use mockito::Server;
 
@@ -21,7 +21,20 @@ fn make_client(server_url: &str) -> OpenRouterProviderClient {
         model: "minimax/minimax-m3".to_string(),
         base_url: server_url.trim_end_matches('/').to_string(),
         timeout_seconds: 10,
-        retry_attempts: 1, // minimal retries for fast tests
+        retry_attempts: 3, // Set to 3 to support retry tests
+        retry_backoff_ms: 10,
+        fallback_models: Vec::new(),
+    };
+    OpenRouterProviderClient::new(reqwest::Client::new(), config)
+}
+
+fn make_client_with_timeout(server_url: &str, timeout_seconds: u64) -> OpenRouterProviderClient {
+    let config = OpenRouterConfig {
+        api_key: "sk-or-test-key".to_string(),
+        model: "minimax/minimax-m3".to_string(),
+        base_url: server_url.trim_end_matches('/').to_string(),
+        timeout_seconds,
+        retry_attempts: 3,
         retry_backoff_ms: 10,
         fallback_models: Vec::new(),
     };
@@ -108,7 +121,7 @@ async fn test_completion_applies_default_model_when_empty() {
         .with_status(200)
         .with_header("content-type", "application/json")
         .with_body(r#"{"choices": [{"message": {"role": "assistant", "content": "OK"}, "index": 0}], "model": "minimax/minimax-m3"}"#)
-        .match_body(r#".*"model":"minimax/minimax-m3".*"#)
+        .match_body(mockito::Matcher::Regex(r#".*"model":"minimax/minimax-m3".*"#.to_string()))
         .create();
 
     let client = make_client(&server.url());
@@ -116,7 +129,7 @@ async fn test_completion_applies_default_model_when_empty() {
     req.model = "".to_string(); // empty model → should use default from config
 
     let result = client.complete(req).await;
-    assert!(result.is_ok());
+    assert!(result.is_ok(), "error: {:?}", result.err());
 
     mock.assert();
 }
@@ -188,13 +201,14 @@ async fn test_completion_timeout_returns_error() {
     let _mock = server
         .mock("POST", "/chat/completions")
         .with_status(200)
-        .with_body("OK")
-        .with_delay(std::time::Duration::from_secs(5))
+        .with_chunked_body(|w| {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            let _ = w.write_all(b"OK");
+            Ok(())
+        })
         .create();
 
-    let mut config = make_client(&server.url()).config;
-    config.timeout_seconds = 2; // 2s timeout
-    let client = OpenRouterProviderClient::new(reqwest::Client::new(), config);
+    let client = make_client_with_timeout(&server.url(), 2); // 2s timeout
 
     let result = client.complete(sample_request()).await;
     assert!(result.is_err());
