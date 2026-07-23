@@ -209,7 +209,8 @@ Return a valid JSON object with these top-level keys:
 - Missing_fields max = 5 items, required fields first.
 - Each missing field question must be in Indonesian (Bahasa).
 - confidence.score < 0.5 when most required fields are missing.
-- Respond in the same language as the teacher's prompt.";
+- Respond in the same language as the teacher's prompt.
+- For document_blueprint.title, ALWAYS generate a highly relevant, concise, and refined title summarizing the core knowledge of the generated material. Do not just use a generic 'asal' title (e.g., use 'Rangkuman Ekosistem Kelas 5' instead of 'buatkan materi tentang ekosistem'). Keep the title concise and not overly long.";
 
 /// Instruction key in config / stored on interpretation requests.
 pub const INTERPRET_INSTRUCTION_KEY: &str = "media_prompt_interpretation_instruction";

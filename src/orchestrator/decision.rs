@@ -31,12 +31,12 @@ pub const VERSION: &str = "media_output_decision.v1";
 const ALLOWED_FORMATS: &[&str] = &["docx", "pdf", "pptx"];
 
 /// Deterministic tie-breaking priority: lower = higher priority.
-/// pdf=0, docx=1, pptx=2  →  PDF wins ties.
+/// pptx=0, pdf=1, docx=2  →  PPTX wins ties.
 fn type_priority(format: &str) -> i32 {
     match format {
-        "pdf" => 0,
-        "docx" => 1,
-        "pptx" => 2,
+        "pptx" => 0,
+        "pdf" => 1,
+        "docx" => 2,
         _ => i32::MAX,
     }
 }
