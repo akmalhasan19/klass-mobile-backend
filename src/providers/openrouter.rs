@@ -441,6 +441,7 @@ mod tests {
                 queue: crate::config::QueueConfig {
                     tries: 3, timeout_seconds: 300, backoff_seconds: 30, concurrency: 1,
                 },
+                rate_limit: Default::default(),
             },
             hmac_secret: String::new(),
             hmac_max_age_seconds: 300,

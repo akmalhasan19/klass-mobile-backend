@@ -1,4 +1,5 @@
 use axum::{http::StatusCode, response::IntoResponse, Json};
+use axum::http::HeaderMap;
 use serde::Serialize;
 
 #[derive(Debug, thiserror::Error)]
@@ -35,6 +36,13 @@ pub enum AppError {
 
     #[error("{0}")]
     Anyhow(#[from] anyhow::Error),
+
+    #[error("Rate limited")]
+    RateLimited {
+        status: StatusCode,
+        headers: HeaderMap,
+        body: Json<serde_json::Value>,
+    },
 }
 
 #[derive(Serialize)]
@@ -51,55 +59,70 @@ struct ErrorResponse {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
-        let (status, code, message) = match &self {
-            AppError::Validation(msg) => (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "validation_failed",
-                msg.clone(),
-            ),
-            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, "not_found", msg.clone()),
-            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, "unauthorized", msg.clone()),
-            AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, "forbidden", msg.clone()),
-            AppError::Conflict(msg) => (StatusCode::CONFLICT, "conflict", msg.clone()),
-            AppError::Internal(msg) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                msg.clone(),
-            ),
-            AppError::Database(e) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "database_error",
-                e.to_string(),
-            ),
-            AppError::Redis(e) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "redis_error",
-                e.to_string(),
-            ),
-            AppError::HttpClient(e) => {
-                (StatusCode::BAD_GATEWAY, "http_client_error", e.to_string())
+        match self {
+            AppError::RateLimited {
+                status,
+                headers,
+                body,
+            } => {
+                let mut resp = (status, Json(body.0)).into_response();
+                resp.headers_mut().extend(headers);
+                return resp;
             }
-            AppError::Config(msg) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "config_error",
-                msg.clone(),
-            ),
-            AppError::Anyhow(e) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                e.to_string(),
-            ),
-        };
+            other => {
+                let (status, code, message) = match &other {
+                    AppError::Validation(msg) => (
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        "validation_failed",
+                        msg.clone(),
+                    ),
+                    AppError::NotFound(msg) => (StatusCode::NOT_FOUND, "not_found", msg.clone()),
+                    AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, "unauthorized", msg.clone()),
+                    AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, "forbidden", msg.clone()),
+                    AppError::Conflict(msg) => (StatusCode::CONFLICT, "conflict", msg.clone()),
+                    AppError::Internal(msg) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "internal_error",
+                        msg.clone(),
+                    ),
+                    AppError::Database(e) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "database_error",
+                        e.to_string(),
+                    ),
+                    AppError::Redis(e) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "redis_error",
+                        e.to_string(),
+                    ),
+                    AppError::HttpClient(e) => {
+                        (StatusCode::BAD_GATEWAY, "http_client_error", e.to_string())
+                    }
+                    AppError::Config(msg) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "config_error",
+                        msg.clone(),
+                    ),
+                    AppError::Anyhow(e) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "internal_error",
+                        e.to_string(),
+                    ),
+                    // Already handled above, but this makes the match exhaustive
+                    AppError::RateLimited { .. } => unreachable!(),
+                };
 
-        let body = ErrorResponse {
-            success: false,
-            error: ErrorBody {
-                code: code.to_string(),
-                message,
-            },
-        };
+                let body = ErrorResponse {
+                    success: false,
+                    error: ErrorBody {
+                        code: code.to_string(),
+                        message,
+                    },
+                };
 
-        (status, Json(body)).into_response()
+                (status, Json(body)).into_response()
+            }
+        }
     }
 }
 

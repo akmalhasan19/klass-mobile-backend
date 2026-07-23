@@ -192,6 +192,81 @@ pub struct RateLimitConfig {
     pub window_seconds: u32,
 }
 
+/// Check per-user rate limit using Redis fixed-window counter.
+///
+/// Returns `Ok(())` if the request is allowed, or `Err((StatusCode, Json<Value))`
+/// with a 429 response if the limit is exceeded.  If Redis is unavailable the
+/// request is always allowed (fail-open).
+pub async fn check_user_rate_limit(
+    redis_pool: &deadpool_redis::Pool,
+    user_id: i64,
+    route: &str,
+    max_requests: u32,
+    window_seconds: u32,
+) -> Result<(), (StatusCode, axum::http::HeaderMap, Json<serde_json::Value>)> {
+    let key = format!("rate_limit:user:{user_id}:{route}");
+
+    // Fail-open: if Redis is unavailable, skip rate limiting entirely
+    let mut conn = match redis_pool.get().await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(error = %e, "redis unavailable for user rate limit — allowing request");
+            return Ok(());
+        }
+    };
+
+    let count: u32 = match redis::cmd("INCR")
+        .arg(&key)
+        .query_async(&mut conn)
+        .await
+    {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(error = %e, "redis INCR failed for user rate limit — allowing request");
+            return Ok(());
+        }
+    };
+
+    // Set expiry only on the first request in the window
+    if count == 1 {
+        let _: Result<(), _> = redis::cmd("EXPIRE")
+            .arg(&key)
+            .arg(window_seconds)
+            .query_async(&mut conn)
+            .await;
+    }
+
+    if count > max_requests {
+        tracing::warn!(
+            user_id = user_id,
+            route = route,
+            count = count,
+            limit = max_requests,
+            "per-user rate limit exceeded"
+        );
+
+        let mut headers = axum::http::HeaderMap::new();
+        if let Ok(val) = axum::http::HeaderValue::from_str(&window_seconds.to_string()) {
+            headers.insert("Retry-After", val);
+        }
+
+        let body = serde_json::json!({
+            "success": false,
+            "error": {
+                "code": "too_many_requests",
+                "message": format!(
+                    "Anda telah mencapai batas maksimum generasi ({max_requests} kali dalam {window_seconds} detik). Silakan coba lagi nanti."
+                ),
+                "retry_after_seconds": window_seconds,
+            }
+        });
+
+        return Err((StatusCode::TOO_MANY_REQUESTS, headers, Json(body)));
+    }
+
+    Ok(())
+}
+
 pub async fn rate_limit_middleware(
     State(app_state): State<AppState>,
     req: axum::http::Request<axum::body::Body>,

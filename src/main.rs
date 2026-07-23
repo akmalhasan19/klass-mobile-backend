@@ -116,6 +116,7 @@ async fn run_server_with_worker(config: AppConfig) -> anyhow::Result<()> {
     let app = Router::new()
         .nest("/api/v1", api::rest::api_router())
         .route("/health", get(health_check))
+        .route("/api/v1/system-health", get(api::rest::system_health::system_health))
         .nest("/internal", internal_routes)
         .merge(swagger)
         .with_state(state)

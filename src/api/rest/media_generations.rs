@@ -216,6 +216,27 @@ pub async fn create(
 ) -> AppResult<(StatusCode, Json<serde_json::Value>)> {
     require_teacher(&principal)?;
 
+    // ── Per-user rate limit (configurable) ─────────────────────────────
+    if let Some(ref redis_pool) = state.redis_pool {
+        let rl = &state.config.media_generation.rate_limit;
+        if let Err((status, headers, body)) =
+            crate::auth::middleware::check_user_rate_limit(
+                redis_pool,
+                principal.user_id,
+                "media-generations:create",
+                rl.max_requests_per_user,
+                rl.window_seconds,
+            )
+            .await
+        {
+            return Err(AppError::RateLimited {
+                status,
+                headers,
+                body,
+            });
+        }
+    }
+
     let service = SubmissionService::new(state.db_pool.clone());
 
     let raw_prompt = payload.raw_prompt.clone();
@@ -536,6 +557,27 @@ pub async fn regenerate(
     Json(payload): Json<RegenerateRequest>,
 ) -> AppResult<(StatusCode, Json<serde_json::Value>)> {
     require_teacher(&principal)?;
+
+    // ── Per-user rate limit (configurable) ─────────────────────────────
+    if let Some(ref redis_pool) = state.redis_pool {
+        let rl = &state.config.media_generation.rate_limit;
+        if let Err((status, headers, body)) =
+            crate::auth::middleware::check_user_rate_limit(
+                redis_pool,
+                principal.user_id,
+                "media-generations:regenerate",
+                rl.max_requests_per_user,
+                rl.window_seconds,
+            )
+            .await
+        {
+            return Err(AppError::RateLimited {
+                status,
+                headers,
+                body,
+            });
+        }
+    }
 
     let repo = PgMediaGenerationsRepo::new(state.db_pool.clone());
 

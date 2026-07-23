@@ -52,6 +52,25 @@ pub struct MediaGenerationConfig {
     pub delivery: ServiceTimeoutsConfig,
     pub python: ServiceTimeoutsConfig,
     pub queue: QueueConfig,
+    #[serde(default)]
+    pub rate_limit: RateLimitConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RateLimitConfig {
+    /// Max requests per user within the window for media generation endpoints.
+    pub max_requests_per_user: u32,
+    /// Window size in seconds for the per-user rate limit.
+    pub window_seconds: u32,
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            max_requests_per_user: 5,
+            window_seconds: 300,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -143,6 +162,8 @@ impl AppConfig {
             .set_default("media_generation.queue.timeout_seconds", 300)?
             .set_default("media_generation.queue.backoff_seconds", 30)?
             .set_default("media_generation.queue.concurrency", 1)?
+            .set_default("media_generation.rate_limit.max_requests_per_user", 5)?
+            .set_default("media_generation.rate_limit.window_seconds", 300)?
             .set_default("r2_transit_bucket_name", "media-generation-service-bucket")?
             .build()?;
 

@@ -12,6 +12,7 @@ pub mod media_generations;
 pub mod media_webhook;
 pub mod response;
 pub mod student_progress;
+pub mod system_health;
 pub mod topics;
 
 use axum::routing::{get, post};

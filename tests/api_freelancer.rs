@@ -528,7 +528,13 @@ async fn test_hire_freelancer_forbidden_non_teacher() {
 
 #[tokio::test]
 async fn test_drop_constraint() {
-    let ctx = common::setup().await.unwrap();
+    let ctx = match common::setup().await {
+        Some(ctx) => ctx,
+        None => {
+            eprintln!("SKIP: DATABASE_URL not set or connection failed");
+            return;
+        }
+    };
     sqlx::query("ALTER TABLE marketplace_tasks DROP CONSTRAINT IF EXISTS marketplace_tasks_status_check;")
         .execute(&ctx.pool)
         .await

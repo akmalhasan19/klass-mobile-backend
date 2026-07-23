@@ -8,7 +8,19 @@
 //! 3. `XACK` on success
 //! 4. `XCLAIM` after idle timeout 300s for recovery
 //! 5. Max tries 3 → DLQ via `dead_letter`
+//!
+//! ## Reliability improvements
+//!
+//! - **Exponential backoff**: Retries use increasing delays (10s → 30s → 90s)
+//!   to give downstream services time to recover.
+//! - **Retryable error distinction**: Only transient errors (5xx, timeout,
+//!   connection) are retried. Permanent errors (4xx validation, artifact
+//!   invalid) go straight to DLQ.
+//! - **Circuit breaker**: Tracks consecutive failures. When the threshold is
+//!   hit, the worker skips reading new messages for a cooldown period.
+//!   In-flight tasks continue to run — the event loop is never blocked.
 
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 
 use deadpool_redis::Pool as RedisPool;
@@ -47,6 +59,19 @@ pub const MAX_TRIES: i64 = 3;
 /// How often (in loop iterations) to run XCLAIM for pending message recovery.
 const CLAIM_INTERVAL: u32 = 6; // every ~30 seconds with 5s BLOCK
 
+/// Base backoff delay in seconds for retries.
+/// Actual delay = BASE * 2^(attempt-1), capped at MAX_BACKOFF.
+const BASE_BACKOFF_SECS: u64 = 10;
+
+/// Maximum backoff delay in seconds.
+const MAX_BACKOFF_SECS: u64 = 90;
+
+/// Circuit breaker: number of consecutive failures before pausing.
+const CIRCUIT_BREAKER_THRESHOLD: u32 = 5;
+
+/// Circuit breaker: cooldown period in seconds after threshold is hit.
+const CIRCUIT_BREAKER_COOLDOWN_SECS: u64 = 60;
+
 // ─── Worker ─────────────────────────────────────────────────────────────────
 
 /// Worker that consumes media generation jobs from Redis Streams.
@@ -59,6 +84,13 @@ pub struct Worker {
     consumer: String,
     concurrency: Arc<Semaphore>,
     claim_counter: std::sync::atomic::AtomicU32,
+    /// Tracks consecutive workflow failures for the circuit breaker.
+    /// Wrapped in Arc so spawned tasks can safely increment/reset it.
+    consecutive_failures: Arc<AtomicU32>,
+    /// Epoch timestamp when the circuit breaker cooldown expires.
+    /// `0` = circuit closed (normal). `>0` = circuit open (skip new reads).
+    /// Stored as `Arc<AtomicU64>` so spawned tasks can reset on success.
+    circuit_open_until: Arc<AtomicU64>,
 }
 
 impl Worker {
@@ -79,6 +111,8 @@ impl Worker {
             consumer: consumer_name,
             concurrency: Arc::new(Semaphore::new(max_concurrency)),
             claim_counter: std::sync::atomic::AtomicU32::new(0),
+            consecutive_failures: Arc::new(AtomicU32::new(0)),
+            circuit_open_until: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -97,9 +131,41 @@ impl Worker {
     ) -> Result<(), WorkerError> {
         // Ensure consumer group exists
         let svc = crate::queue::redis_streams::QueueService::new(self.pool.clone(), 1);
-        svc.create_consumer_group().await.map_err(|e| WorkerError::Redis(e.to_string()))?;
+        svc.create_consumer_group()
+            .await
+            .map_err(|e| WorkerError::Redis(e.to_string()))?;
 
         loop {
+            // ── Circuit breaker check (non-blocking) ────────────────────
+            //
+            // When the circuit is open we skip reading NEW messages but
+            // do NOT sleep the event loop.  In-flight spawned tasks
+            // continue to run and can still succeed / fail.
+            let now_epoch = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let open_until = self.circuit_open_until.load(Ordering::Relaxed);
+            if open_until > 0 && now_epoch < open_until {
+                let remaining = open_until.saturating_sub(now_epoch);
+                tracing::warn!(
+                    consecutive_failures = self.consecutive_failures.load(Ordering::Relaxed),
+                    cooldown_remaining_secs = remaining,
+                    "worker: circuit breaker OPEN — skipping new reads, in-flight tasks still running"
+                );
+                // Sleep only the remaining cooldown, then fall through to
+                // reset the circuit on the next iteration.  This avoids
+                // blocking indefinitely and lets the loop re-evaluate.
+                tokio::time::sleep(std::time::Duration::from_secs(remaining.min(5))).await;
+                continue;
+            }
+            // Cooldown expired — reset circuit
+            if open_until > 0 && now_epoch >= open_until {
+                self.circuit_open_until.store(0, Ordering::Relaxed);
+                self.consecutive_failures.store(0, Ordering::SeqCst);
+                tracing::info!("worker: circuit breaker RESET — resuming processing");
+            }
+
             // Periodically claim pending messages from failed/abandoned workers
             self.claim_pending().await?;
 
@@ -118,6 +184,8 @@ impl Worker {
                 let generate = generate.clone();
                 let publish = publish.clone();
                 let compose = compose.clone();
+                let consecutive_failures = self.consecutive_failures.clone();
+                let circuit_open_until = self.circuit_open_until.clone();
 
                 tokio::spawn(async move {
                     let _permit = permit;
@@ -130,7 +198,7 @@ impl Worker {
                         "queue": STREAM_KEY,
                         "tries": MAX_TRIES,
                         "timeout_seconds": 300,
-                        "backoff_seconds": 30,
+                        "backoff_seconds": BASE_BACKOFF_SECS,
                     });
 
                     let result = wf
@@ -149,6 +217,10 @@ impl Worker {
 
                     match result {
                         Ok(()) => {
+                            // Reset consecutive failures on success
+                            consecutive_failures.store(0, Ordering::SeqCst);
+                            circuit_open_until.store(0, Ordering::Relaxed);
+
                             // XACK on success
                             let mut conn = match pool.get().await {
                                 Ok(c) => c,
@@ -167,12 +239,78 @@ impl Worker {
                                 .await;
                         }
                         Err(e) => {
-                            // Determine if this is a retryable error
                             let error_msg = e.to_string();
                             let new_attempt = entry.attempt + 1;
 
-                            if new_attempt > MAX_TRIES {
+                            // ── Check if error is retryable ───────────
+                            if !is_retryable_error(&error_msg) {
+                                // Permanent error → DLQ immediately, no retry
+                                tracing::error!(
+                                    generation_id = %entry.generation_id,
+                                    attempt = entry.attempt,
+                                    error = %error_msg,
+                                    "worker: non-retryable error, moving to DLQ"
+                                );
+
+                                let new_failures =
+                                    consecutive_failures.fetch_add(1, Ordering::SeqCst) + 1;
+                                // Open circuit breaker on threshold breach
+                                if new_failures >= CIRCUIT_BREAKER_THRESHOLD {
+                                    let cooldown_until =
+                                        now_epoch + CIRCUIT_BREAKER_COOLDOWN_SECS;
+                                    circuit_open_until
+                                        .store(cooldown_until, Ordering::Relaxed);
+                                    tracing::warn!(
+                                        generation_id = %entry.generation_id,
+                                        consecutive_failures = new_failures,
+                                        cooldown_secs = CIRCUIT_BREAKER_COOLDOWN_SECS,
+                                        "worker: circuit breaker OPENED due to consecutive failures"
+                                    );
+                                }
+
+                                let _ = dead_letter
+                                    .send_to_dlq(
+                                        &entry.generation_id,
+                                        entry.attempt,
+                                        "PERMANENT_ERROR",
+                                        &error_msg,
+                                        &audit,
+                                    )
+                                    .await;
+
+                                // XACK to remove from PEL
+                                let mut conn = match pool.get().await {
+                                    Ok(c) => c,
+                                    Err(e) => {
+                                        tracing::error!(
+                                            generation_id = %entry.generation_id,
+                                            error = %e,
+                                            "worker: failed to XACK after DLQ"
+                                        );
+                                        return;
+                                    }
+                                };
+                                let _: Result<(), _> = redis::cmd("XACK")
+                                    .arg(&[&stream, &group, &entry.id])
+                                    .query_async(&mut *conn)
+                                    .await;
+                            } else if new_attempt > MAX_TRIES {
                                 // Exhausted retries → DLQ
+                                let new_failures =
+                                    consecutive_failures.fetch_add(1, Ordering::SeqCst) + 1;
+                                if new_failures >= CIRCUIT_BREAKER_THRESHOLD {
+                                    let cooldown_until =
+                                        now_epoch + CIRCUIT_BREAKER_COOLDOWN_SECS;
+                                    circuit_open_until
+                                        .store(cooldown_until, Ordering::Relaxed);
+                                    tracing::warn!(
+                                        generation_id = %entry.generation_id,
+                                        consecutive_failures = new_failures,
+                                        cooldown_secs = CIRCUIT_BREAKER_COOLDOWN_SECS,
+                                        "worker: circuit breaker OPENED due to consecutive failures"
+                                    );
+                                }
+
                                 tracing::error!(
                                     generation_id = %entry.generation_id,
                                     attempt = new_attempt,
@@ -208,13 +346,24 @@ impl Worker {
                                     .query_async(&mut *conn)
                                     .await;
                             } else {
-                                // Retryable: XACK + re-enqueue with incremented attempt
+                                // Retryable: compute exponential backoff delay
+                                let backoff_secs =
+                                    compute_backoff(entry.attempt, BASE_BACKOFF_SECS, MAX_BACKOFF_SECS);
+
                                 tracing::warn!(
                                     generation_id = %entry.generation_id,
                                     attempt = new_attempt,
+                                    max_tries = MAX_TRIES,
+                                    backoff_secs = backoff_secs,
                                     error = %error_msg,
-                                    "worker: workflow failed, re-enqueuing"
+                                    "worker: retryable error, re-enqueuing after backoff"
                                 );
+
+                                // ── Exponential backoff sleep ───────────
+                                tokio::time::sleep(std::time::Duration::from_secs(
+                                    backoff_secs,
+                                ))
+                                .await;
 
                                 let mut conn = match pool.get().await {
                                     Ok(c) => c,
@@ -393,6 +542,62 @@ impl Worker {
     }
 }
 
+// ─── Exponential backoff ────────────────────────────────────────────────────
+
+/// Compute exponential backoff delay: `base * 2^(attempt-1)`, capped at `max`.
+///
+/// Attempt 1 → base, attempt 2 → 2*base, attempt 3 → 4*base, etc.
+/// This gives the downstream services increasing time to recover between retries.
+fn compute_backoff(attempt: i64, base_secs: u64, max_secs: u64) -> u64 {
+    let shift = (attempt - 1).max(0) as u32;
+    let delay = base_secs.saturating_mul(1u64 << shift);
+    delay.min(max_secs)
+}
+
+// ─── Retryable error detection ──────────────────────────────────────────────
+
+/// Determine if a workflow error is retryable (transient) or permanent.
+///
+/// **Permanent errors** (NOT retried):
+/// - `ARTIFACT_INVALID` — Python renderer rejected the payload (4xx)
+/// - `PYTHON_SERVICE_UNAVAILABLE` with 4xx status
+/// - Validation errors, missing fields, contract violations
+///
+/// **Retryable errors** (retried with backoff):
+/// - Network/timeout errors
+/// - 5xx from Python renderer or LLM providers
+/// - Connection errors
+/// - Lock contention errors
+fn is_retryable_error(error_msg: &str) -> bool {
+    let lower = error_msg.to_lowercase();
+
+    // Non-retryable: artifact validation failures (4xx from Python renderer)
+    if lower.contains("artifact_invalid") {
+        return false;
+    }
+
+    // Non-retryable: payload validation failures
+    if lower.contains("incoming request payload failed validation") {
+        return false;
+    }
+
+    // Non-retryable: contract validation failures (permanent schema mismatch)
+    if lower.contains("contract validation failed")
+        && !lower.contains("timeout")
+        && !lower.contains("connection")
+    {
+        return false;
+    }
+
+    // Non-retryable: missing required fields
+    if lower.contains("missing required") || lower.contains("validation error") {
+        return false;
+    }
+
+    // Everything else is considered retryable (timeouts, 5xx, connection errors)
+    true
+}
+
 // ─── Response parser ────────────────────────────────────────────────────────
 
 /// Extract messages from a raw XREADGROUP stream result.
@@ -484,7 +689,7 @@ pub enum WorkerError {
     Redis(String),
 }
 
-// ─── Tests ───────────────────────────────────────────────────────────────────
+// ─── Tests ──────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -499,7 +704,77 @@ mod tests {
         assert_eq!(BLOCK_SECS, 5);
         assert_eq!(IDLE_TIMEOUT_SECS, 300);
         assert_eq!(MAX_TRIES, 3);
+        assert_eq!(BASE_BACKOFF_SECS, 10);
+        assert_eq!(MAX_BACKOFF_SECS, 90);
+        assert_eq!(CIRCUIT_BREAKER_THRESHOLD, 5);
+        assert_eq!(CIRCUIT_BREAKER_COOLDOWN_SECS, 60);
     }
+
+    // ── Exponential backoff tests ───────────────────────────────────────
+
+    #[test]
+    fn test_compute_backoff_attempt_1() {
+        assert_eq!(compute_backoff(1, 10, 90), 10);
+    }
+
+    #[test]
+    fn test_compute_backoff_attempt_2() {
+        assert_eq!(compute_backoff(2, 10, 90), 20);
+    }
+
+    #[test]
+    fn test_compute_backoff_attempt_3() {
+        assert_eq!(compute_backoff(3, 10, 90), 40);
+    }
+
+    #[test]
+    fn test_compute_backoff_attempt_4() {
+        assert_eq!(compute_backoff(4, 10, 90), 80);
+    }
+
+    #[test]
+    fn test_compute_backoff_capped_at_max() {
+        assert_eq!(compute_backoff(5, 10, 90), 90);
+        assert_eq!(compute_backoff(10, 10, 90), 90);
+    }
+
+    // ── Retryable error tests ───────────────────────────────────────────
+
+    #[test]
+    fn test_non_retryable_artifact_invalid() {
+        assert!(!is_retryable_error("Python renderer error (artifact_invalid): validation failed"));
+    }
+
+    #[test]
+    fn test_non_retryable_payload_validation() {
+        assert!(!is_retryable_error(
+            "Incoming request payload failed validation"
+        ));
+    }
+
+    #[test]
+    fn test_non_retryable_contract_validation() {
+        assert!(!is_retryable_error(
+            "contract validation failed: missing field"
+        ));
+    }
+
+    #[test]
+    fn test_retryable_timeout() {
+        assert!(is_retryable_error("connection timeout"));
+    }
+
+    #[test]
+    fn test_retryable_connection_error() {
+        assert!(is_retryable_error("connection refused"));
+    }
+
+    #[test]
+    fn test_retryable_generic_error() {
+        assert!(is_retryable_error("something went wrong"));
+    }
+
+    // ── Stream entry tests ──────────────────────────────────────────────
 
     #[test]
     fn test_stream_entry_construction() {
