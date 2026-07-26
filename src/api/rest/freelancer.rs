@@ -81,7 +81,53 @@ pub struct HiredFreelancerResource {
     pub suggested_freelancer_id: Option<i64>,
 }
 
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct FreelancerUserResource {
+    pub id: i64,
+    pub name: String,
+    pub email: String,
+    pub avatar_url: Option<String>,
+    pub role: String,
+}
+
 // ─── Handlers ─────────────────────────────────────────────────────────────────
+
+/// GET /freelancers
+#[utoipa::path(
+    get,
+    path = "/api/v1/freelancers",
+    tag = "freelancers",
+    responses(
+        (status = 200, body = Vec<FreelancerUserResource>),
+    ),
+)]
+pub async fn list_freelancers(
+    State(state): State<AppState>,
+) -> AppResult<(StatusCode, Json<serde_json::Value>)> {
+    let users = sqlx::query_as::<_, crate::db::repositories::users::User>(
+        r#"SELECT id, name, email, email_verified_at, password, avatar_url,
+                  primary_subject_id, role, remember_token,
+                  security_question, security_answer, created_at, updated_at
+           FROM users WHERE role = 'freelancer' ORDER BY id ASC"#,
+    )
+    .fetch_all(&state.db_pool)
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to fetch freelancers: {e}")))?;
+
+    let resources: Vec<FreelancerUserResource> = users
+        .into_iter()
+        .map(|u| FreelancerUserResource {
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            avatar_url: u.avatar_url,
+            role: u.role,
+        })
+        .collect();
+
+    Ok(response::ok(resources))
+}
+
 
 /// POST /media-generations/{id}/suggest-freelancers
 #[utoipa::path(

@@ -67,6 +67,8 @@ pub fn api_router() -> Router<AppState> {
 
     let gallery_routes = Router::new().route("/", get(gallery::index));
 
+    let freelancer_routes = Router::new().route("/", get(freelancer::list_freelancers));
+
     let admin_routes = admin::admin_router();
 
     Router::new()
@@ -74,6 +76,7 @@ pub fn api_router() -> Router<AppState> {
         .nest("/user", user_routes)
         .nest("/topics", topic_routes)
         .nest("/contents", content_routes)
+        .nest("/freelancers", freelancer_routes)
         .nest("/marketplace-tasks", marketplace_task_routes)
         .nest("/media-generations", media_generation_routes)
         .nest("/student-progress", student_progress_routes)
