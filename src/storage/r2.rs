@@ -99,17 +99,15 @@ pub fn sanitise_filename(stem: &str, extension: &str) -> String {
         .unwrap_or_default()
         .as_millis();
 
-    // Slugify the stem
+    // Slugify the stem without dashes (-)
     let slug: String = stem
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '.' { c } else { ' ' })
+        .map(|c| if c.is_alphanumeric() || c == '.' { c } else { ' ' })
         .collect::<String>()
         .split_whitespace()
         .collect::<Vec<_>>()
-        .join("-")
-        .to_lowercase()
-        .trim_start_matches('-')
-        .trim_end_matches('-')
+        .join(" ")
+        .trim()
         .to_string();
 
     let slug = if slug.is_empty() { "untitled" } else { &slug };
@@ -353,14 +351,13 @@ mod tests {
     fn test_sanitise_filename_basic() {
         let name = sanitise_filename("My File", "pdf");
         assert!(name.ends_with(".pdf"));
-        assert!(!name.contains(' '));
-        assert!(name.contains("my-file"));
+        assert!(name.contains("My File"));
     }
 
     #[test]
     fn test_sanitise_filename_special_chars() {
         let name = sanitise_filename("Hello@World!#$%^&*()", "png");
-        assert!(name.contains("hello-world"));
+        assert!(name.contains("Hello World"));
         assert!(name.ends_with(".png"));
     }
 
@@ -380,13 +377,13 @@ mod tests {
     #[test]
     fn test_sanitise_filename_whitespace_collapsed() {
         let name = sanitise_filename("a   b   c", "txt");
-        assert!(name.contains("a-b-c"));
+        assert!(name.contains("a b c"));
     }
 
     #[test]
     fn test_sanitise_filename_leading_trailing_dashes_removed() {
         let name = sanitise_filename("--hello-world--", "jpg");
-        assert!(name.contains("hello-world"));
+        assert!(name.contains("hello world"));
     }
 
     #[test]

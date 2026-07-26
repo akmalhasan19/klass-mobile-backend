@@ -94,7 +94,7 @@ fn test_interpretation_provider_error_triggers_fallback() {
     let result = klass_gateway::contracts::prompt_interpretation::decode_and_validate(invalid_content);
     assert!(result.is_err());
 
-    let fallback_payload = klass_gateway::contracts::prompt_interpretation::fallback("Buatkan materi");
+    let fallback_payload = klass_gateway::contracts::prompt_interpretation::fallback("Buatkan materi", "pdf");
     assert!(fallback_payload.fallback.triggered);
     assert_eq!(fallback_payload.language, "id");
     assert_eq!(fallback_payload.output_type_candidates.len(), 3);

@@ -1767,7 +1767,7 @@ mod tests {
 
     #[test]
     fn test_fallback_creates_valid_payload() {
-        let p = fallback("Create a worksheet about fractions for grade 5");
+        let p = fallback("Create a worksheet about fractions for grade 5", "pdf");
         assert_eq!(p.schema_version, SCHEMA_VERSION);
         assert!(p.fallback.triggered);
         assert_eq!(p.output_type_candidates.len(), 3);
@@ -2187,7 +2187,7 @@ mod tests {
 
     #[test]
     fn test_fallback_has_plan_mode() {
-        let p = fallback("Buatkan materi");
+        let p = fallback("Buatkan materi", "pdf");
         assert!(!p.plan_mode.active);
         assert!(p.missing_fields.is_empty());
     }

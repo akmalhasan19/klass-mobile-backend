@@ -852,7 +852,7 @@ mod tests {
     use super::*;
 
     fn sample_interpretation() -> InterpretationPayload {
-        crate::contracts::prompt_interpretation::fallback("Buatkan materi pecahan kelas 5 SD")
+        crate::contracts::prompt_interpretation::fallback("Buatkan materi pecahan kelas 5 SD", "pdf")
     }
 
     fn sample_draft_input() -> DraftInput {
