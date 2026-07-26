@@ -12,7 +12,6 @@ pub async fn smoke_llm(config: &AppConfig) -> anyhow::Result<()> {
 
     let http = reqwest::Client::builder()
         .use_rustls_tls()
-        .http2_prior_knowledge()
         .gzip(true)
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(90))
@@ -57,7 +56,6 @@ pub async fn smoke_python(config: &AppConfig) -> anyhow::Result<()> {
 
     let http = reqwest::Client::builder()
         .use_rustls_tls()
-        .http2_prior_knowledge()
         .gzip(true)
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(30))

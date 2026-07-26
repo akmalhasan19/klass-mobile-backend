@@ -47,8 +47,6 @@ services:
     healthCheckPath: /health
     postDeployCommand: /usr/local/bin/klass-gateway --smoke-llm && /usr/local/bin/klass-gateway --smoke-python
     envVars:
-      - key: PORT
-        value: 8080
       - key: HOST
         value: 0.0.0.0
       - key: GRPC_PORT
