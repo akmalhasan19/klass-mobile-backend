@@ -67,7 +67,10 @@ pub fn api_router() -> Router<AppState> {
 
     let gallery_routes = Router::new().route("/", get(gallery::index));
 
-    let freelancer_routes = Router::new().route("/", get(freelancer::list_freelancers));
+    let freelancer_routes = Router::new()
+        .route("/", get(freelancer::list_freelancers))
+        .route("/{id}/profile", get(freelancer::get_freelancer_profile))
+        .route("/{id}/profile/basic", get(freelancer::get_freelancer_profile_basic));
 
     let admin_routes = admin::admin_router();
 

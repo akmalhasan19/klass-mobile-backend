@@ -100,6 +100,33 @@ pub struct FreelancerUserResource {
     pub response_time: String,
 }
 
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct PortfolioItemResource {
+    pub id: i64,
+    pub title: String,
+    pub description: String,
+    pub image_url: Option<String>,
+    pub category: String,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct FreelancerProfileResource {
+    pub id: i64,
+    pub user_id: i64,
+    pub display_name: String,
+    pub role: String,
+    pub bio: String,
+    pub location: String,
+    pub avatar_url: Option<String>,
+    pub price: String,
+    pub rating: f64,
+    pub job_count: i32,
+    pub response_time: String,
+    pub verified: bool,
+    pub skills: Vec<String>,
+    pub portfolio: Vec<PortfolioItemResource>,
+}
+
 #[derive(Debug, sqlx::FromRow)]
 struct FreelancerDbRow {
     id: i64,
@@ -112,6 +139,32 @@ struct FreelancerDbRow {
     hourly_rate: String,
     skills: serde_json::Value,
     response_time: String,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct FreelancerProfileDbRow {
+    id: i64,
+    name: String,
+    email: String,
+    avatar_url: Option<String>,
+    role: String,
+    bio: String,
+    location: String,
+    verified: bool,
+    rating: f64,
+    job_count: i32,
+    hourly_rate: String,
+    skills: serde_json::Value,
+    response_time: String,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct PortfolioItemDbRow {
+    id: i64,
+    title: String,
+    description: String,
+    image_url: Option<String>,
+    category: String,
 }
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
@@ -169,8 +222,122 @@ pub async fn list_freelancers(
     Ok(response::ok(resources))
 }
 
+// ─── Profile helpers ──────────────────────────────────────────────────────────
 
+/// Fetch the base freelancer profile row from the `users` table.
+/// Returns an `AppError::NotFound` if the user is not found or is not a freelancer.
+async fn fetch_freelancer_profile_base(
+    pool: &sqlx::PgPool,
+    freelancer_id: i64,
+) -> Result<(FreelancerProfileDbRow, Vec<String>), AppError> {
+    let row = sqlx::query_as::<_, FreelancerProfileDbRow>(
+        r#"SELECT id, name, email, avatar_url, role,
+                  COALESCE(bio, '') AS bio,
+                  COALESCE(location, '') AS location,
+                  COALESCE(verified, FALSE) AS verified,
+                  COALESCE(rating, 0.0)::FLOAT8 AS rating,
+                  COALESCE(job_count, 0)::INT AS job_count,
+                  COALESCE(hourly_rate, '--') AS hourly_rate,
+                  COALESCE(skills, '[]'::jsonb) AS skills,
+                  COALESCE(response_time, '-') AS response_time
+           FROM users
+           WHERE id = $1 AND role = 'freelancer'"#,
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to fetch freelancer profile: {e}")))?
+    .ok_or_else(|| AppError::NotFound("Freelancer not found".into()))?;
 
+    let skills: Vec<String> = serde_json::from_value(row.skills.clone()).unwrap_or_default();
+    Ok((row, skills))
+}
+
+fn profile_from_row(row: FreelancerProfileDbRow, skills: Vec<String>, portfolio: Vec<PortfolioItemResource>) -> FreelancerProfileResource {
+    FreelancerProfileResource {
+        id: row.id,
+        user_id: row.id,
+        display_name: row.name,
+        role: row.role,
+        bio: row.bio,
+        location: row.location,
+        avatar_url: row.avatar_url,
+        price: row.hourly_rate,
+        rating: row.rating,
+        job_count: row.job_count,
+        response_time: row.response_time,
+        verified: row.verified,
+        skills,
+        portfolio,
+    }
+}
+
+/// GET /freelancers/{id}/profile
+#[utoipa::path(
+    get,
+    path = "/api/v1/freelancers/{id}/profile",
+    tag = "freelancers",
+    params(
+        ("id" = i64, Path, description = "Freelancer user ID"),
+    ),
+    responses(
+        (status = 200, body = FreelancerProfileResource),
+        (status = 404, description = "Freelancer not found"),
+    ),
+)]
+pub async fn get_freelancer_profile(
+    State(state): State<AppState>,
+    Path(freelancer_id): Path<i64>,
+) -> AppResult<(StatusCode, Json<serde_json::Value>)> {
+    let (profile_row, skills) = fetch_freelancer_profile_base(&state.db_pool, freelancer_id).await?;
+
+    let portfolio_rows = sqlx::query_as::<_, PortfolioItemDbRow>(
+        r#"SELECT id, title, description, image_url, category
+           FROM freelancer_portfolio_items
+           WHERE freelancer_user_id = $1
+           ORDER BY sort_order ASC"#,
+    )
+    .bind(freelancer_id)
+    .fetch_all(&state.db_pool)
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to fetch portfolio items: {e}")))?;
+
+    let portfolio: Vec<PortfolioItemResource> = portfolio_rows
+        .into_iter()
+        .map(|item| PortfolioItemResource {
+            id: item.id,
+            title: item.title,
+            description: item.description,
+            image_url: item.image_url,
+            category: item.category,
+        })
+        .collect();
+
+    let profile = profile_from_row(profile_row, skills, portfolio);
+    Ok(response::ok(profile))
+}
+
+/// GET /freelancers/{id}/profile/basic
+/// Lightweight endpoint returning only basic profile info (no portfolio).
+#[utoipa::path(
+    get,
+    path = "/api/v1/freelancers/{id}/profile/basic",
+    tag = "freelancers",
+    params(
+        ("id" = i64, Path, description = "Freelancer user ID"),
+    ),
+    responses(
+        (status = 200, body = FreelancerProfileResource),
+        (status = 404, description = "Freelancer not found"),
+    ),
+)]
+pub async fn get_freelancer_profile_basic(
+    State(state): State<AppState>,
+    Path(freelancer_id): Path<i64>,
+) -> AppResult<(StatusCode, Json<serde_json::Value>)> {
+    let (profile_row, skills) = fetch_freelancer_profile_base(&state.db_pool, freelancer_id).await?;
+    let profile = profile_from_row(profile_row, skills, vec![]);
+    Ok(response::ok(profile))
+}
 
 /// POST /media-generations/{id}/suggest-freelancers
 #[utoipa::path(
